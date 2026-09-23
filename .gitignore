@@ -80,3 +80,13 @@ Desktop.ini
 *.tmp
 tmp/
 temp/
+
+# ------------------------------------------------------------------------------
+# 7. AI Agent Configurations & Internal Rules (Private Customizations)
+# ------------------------------------------------------------------------------
+.agents/
+AGENTS.md
+agents.md
+GEMINI.md
+gemini.md
+
