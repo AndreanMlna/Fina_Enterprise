@@ -1,0 +1,29 @@
+# Virtual Environments & Package Managers
+.venv/
+node_modules/
+dist/
+.bun/
+
+# Environment Variables & Secrets (CRITICAL: NEVER COMMIT TO GIT)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Temporary Files
+Thumbs.db
+.DS_Store
