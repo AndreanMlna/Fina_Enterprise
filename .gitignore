@@ -1,29 +1,82 @@
-# Virtual Environments & Package Managers
-.venv/
-node_modules/
-dist/
-.bun/
+# ==============================================================================
+# FINA-ENTERPRISE .gitignore
+# Production-Grade Git Ignore Configuration (Google Engineering & OWASP Standards)
+# ==============================================================================
 
-# Environment Variables & Secrets (CRITICAL: NEVER COMMIT TO GIT)
+# ------------------------------------------------------------------------------
+# 1. Environment Variables & Secrets (CRITICAL: NEVER COMMIT TO GIT)
+# ------------------------------------------------------------------------------
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+*service-account*.json
+credentials.json
+client_secret*.json
 
-# Python Cache
+# ------------------------------------------------------------------------------
+# 2. Virtual Environments & Package Managers
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+env/
+node_modules/
+dist/
+dist-ssr/
+build/
+.bun/
+.pnpm-store/
+
+# ------------------------------------------------------------------------------
+# 3. Python Cache & Compilation Artifacts
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+*.dll
+*.dylib
 .pytest_cache/
 .coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# IDE & Editor Settings
+# ------------------------------------------------------------------------------
+# 4. Logs, Dumps & Local Databases
+# ------------------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+
+# ------------------------------------------------------------------------------
+# 5. IDE & Editor Configuration
+# ------------------------------------------------------------------------------
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
-# OS Temporary Files
+# ------------------------------------------------------------------------------
+# 6. Operating System Artifacts & Temp Files
+# ------------------------------------------------------------------------------
 Thumbs.db
+Desktop.ini
 .DS_Store
+*.tmp
+tmp/
+temp/
