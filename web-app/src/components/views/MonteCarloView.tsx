@@ -1,24 +1,70 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Sliders, 
   RefreshCw,
   Sparkles,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
+  Database,
+  Loader2
 } from 'lucide-react';
-import type { MonteCarloConfig, MonteCarloResult } from '../../types';
+import type { MonteCarloConfig, MonteCarloResult, KPIStats, RunwayBaseline } from '../../types';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { api } from '../../services/api';
 
-export const MonteCarloView: React.FC = () => {
+interface MonteCarloViewProps {
+  kpi?: KPIStats;
+}
+
+export const MonteCarloView: React.FC<MonteCarloViewProps> = ({ kpi }) => {
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [baselineData, setBaselineData] = useState<RunwayBaseline | null>(null);
+  const [isLoadingBaseline, setIsLoadingBaseline] = useState<boolean>(true);
+  const baseCash = (kpi && kpi.liquidCash > 0) ? kpi.liquidCash : 48650000;
+
   const [config, setConfig] = useState<MonteCarloConfig>({
-    initialCash: 48650000,
+    initialCash: baseCash,
     dailyRevenueMean: 3500000,
     revenueDropPercent: 20, // 20% drop scenario
     receivableDelayDays: 14, // 14 days overdue delay
     costInflationPercent: 10, // 10% raw material inflation
     fixedMonthlyCost: 14500000
   });
+
+  // Ambil baseline riil dari buku besar SAK EMKM PostgreSQL
+  useEffect(() => {
+    let isMounted = true;
+    const loadBaseline = async () => {
+      try {
+        const data = await api.getRunwayBaseline();
+        if (isMounted && data) {
+          setBaselineData(data);
+          setConfig(prev => ({
+            ...prev,
+            initialCash: (data.initial_cash > 0) ? data.initial_cash : (kpi?.liquidCash || prev.initialCash),
+            dailyRevenueMean: (data.daily_revenue_mean > 0) ? data.daily_revenue_mean : prev.dailyRevenueMean,
+            fixedMonthlyCost: (data.fixed_monthly_cost > 0) ? data.fixed_monthly_cost : prev.fixedMonthlyCost
+          }));
+        }
+      } catch (err) {
+        console.warn("[MonteCarloView] Gagal mengambil baseline runway riil:", err);
+      } finally {
+        if (isMounted) setIsLoadingBaseline(false);
+      }
+    };
+    loadBaseline();
+    return () => { isMounted = false; };
+  }, [kpi?.liquidCash]);
+
+  // Sinkronisasi dinamis jika saldo kas aktual tenant diperbarui dari transaksi buku besar
+  useEffect(() => {
+    if (kpi && kpi.liquidCash > 0) {
+      setConfig(prev => ({
+        ...prev,
+        initialCash: kpi.liquidCash
+      }));
+    }
+  }, [kpi?.liquidCash]);
 
   // Deterministic Math Monte Carlo Simulator function
   const simulationResult: MonteCarloResult = useMemo(() => {
@@ -118,12 +164,29 @@ export const MonteCarloView: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: '1.6rem', color: '#ffffff' }}>Predictive Liquidity Runway Engine</h2>
           <span className="badge badge-indigo">10.000 Iterasi Monte Carlo</span>
+          {isLoadingBaseline ? (
+            <span className="badge badge-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Loader2 size={11} className="animate-spin" /> Mengambil Baseline Buku Besar...
+            </span>
+          ) : baselineData ? (
+            <span className="badge badge-emerald" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Database size={11} />
+              {baselineData.data_source === 'REAL_JOURNAL'
+                ? `Buku Besar PostgreSQL (${baselineData.transaction_count} Baris SAK EMKM)`
+                : 'Parameter Terkalibrasi'}
+            </span>
+          ) : null}
         </div>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
           Simulasi stokastik komputasional deterministik untuk memproyeksikan daya tahan kas usaha terhadap shock ekonomi riil (inflasi bahan baku & piutang macet).
+          {baselineData && (
+            <span style={{ display: 'block', marginTop: '4px', color: '#94a3b8', fontSize: '0.78rem' }}>
+              Omzet Rata-rata: Rp {Math.round(config.dailyRevenueMean).toLocaleString('id-ID')}/hari • Biaya Tetap: Rp {Math.round(config.fixedMonthlyCost).toLocaleString('id-ID')}/bln
+            </span>
+          )}
         </p>
       </div>
 
@@ -336,12 +399,12 @@ export const MonteCarloView: React.FC = () => {
         cancelLabel="Batal"
         onConfirm={() => {
           setConfig({
-            initialCash: 48650000,
-            dailyRevenueMean: 3500000,
+            initialCash: (baselineData && baselineData.initial_cash > 0) ? baselineData.initial_cash : baseCash,
+            dailyRevenueMean: (baselineData && baselineData.daily_revenue_mean > 0) ? baselineData.daily_revenue_mean : 3500000,
             revenueDropPercent: 0,
             receivableDelayDays: 0,
             costInflationPercent: 0,
-            fixedMonthlyCost: 14500000
+            fixedMonthlyCost: (baselineData && baselineData.fixed_monthly_cost > 0) ? baselineData.fixed_monthly_cost : 14500000
           });
           setIsResetConfirmOpen(false);
         }}

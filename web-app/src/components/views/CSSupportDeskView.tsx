@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import type { SupportTicket } from '../../types';
-import { mockSupportTickets } from '../../data/mockData';
 import { ConfirmDialog } from '../ConfirmDialog';
 
 interface CSSupportDeskViewProps {
@@ -39,31 +38,35 @@ export const CSSupportDeskView: React.FC<CSSupportDeskViewProps> = ({
           if (data && data.length > 0) {
             const mapped: SupportTicket[] = data.map((t: any) => ({
               id: t.id,
-              ticketNumber: t.id,
+              ticketNumber: t.ticket_number || t.id,
               tenantName: t.reporter_name || t.tenant_id || 'Pedagang UMKM',
-              userPhone: t.reporter_phone || '+628123456789',
+              userPhone: t.user_phone || '+628123456789',
               category: (t.category as any) || 'SYSTEM_BUG',
               description: t.description || '',
               priority: (t.priority as any) || 'MEDIUM',
               status: t.status === 'RESOLVED' ? 'RESOLVED' : t.status === 'IN_PROGRESS' ? 'IN_REVIEW' : 'OPEN',
-              subject: t.title || 'Laporan Pengguna',
-              createdAt: t.created_at ? t.created_at.replace('T', ' ').substring(0, 16) : '2026-09-17 12:00',
-              suggestedResolution: t.assigned_to ? `Ditangani oleh: ${t.assigned_to}` : 'Menunggu review staf CS'
+              subject: t.subject || 'Laporan Pengguna',
+              createdAt: t.created_at ? t.created_at.replace('T', ' ').substring(0, 16) : '',
+              suggestedResolution: t.suggested_resolution || 'Menunggu review staf CS'
             }));
             setInternalTickets(mapped);
+          } else {
+            setInternalTickets([]);
           }
-        } catch { /* use fallback tickets */ }
-        setIsLoadingTickets(false);
+        } catch (err) {
+          console.error("[CSSupportDeskView] Gagal mengambil tiket:", err);
+          setInternalTickets([]);
+        } finally {
+          setIsLoadingTickets(false);
+        }
       };
       fetchTickets();
     }
   }, [propTickets]);
 
-  const tickets = (propTickets && propTickets.length > 0) 
-    ? propTickets 
-    : (internalTickets.length > 0 ? internalTickets : mockSupportTickets);
-  const [selectedTicketId, setSelectedTicketId] = useState<string>(tickets[0]?.id || '');
-  const selectedTicket = tickets.find(t => t.id === selectedTicketId) || tickets[0];
+  const tickets = (propTickets && propTickets.length > 0) ? propTickets : internalTickets;
+  const [selectedTicketId, setSelectedTicketId] = useState<string>('');
+  const selectedTicket = tickets.find(t => t.id === selectedTicketId) || tickets[0] || null;
   const [csReply, setCsReply] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successToast, setSuccessToast] = useState('');
@@ -231,79 +234,94 @@ export const CSSupportDeskView: React.FC<CSSupportDeskViewProps> = ({
               <span className="badge badge-emerald">Real-time Ingestion</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
-              {tickets.map((t) => {
-                const isSelected = t.id === selectedTicket.id;
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => setSelectedTicketId(t.id)}
-                    style={{
-                      padding: '14px',
-                      borderRadius: 'var(--radius-md)',
-                      background: isSelected ? 'rgba(6, 182, 212, 0.12)' : 'rgba(255,255,255,0.02)',
-                      border: isSelected ? '1px solid var(--cyan-500)' : '1px solid var(--border-subtle)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--cyan-400)', fontWeight: 600 }}>
-                        {t.ticketNumber}
-                      </span>
-                      <span className={`badge ${t.status === 'RESOLVED' ? 'badge-emerald' : t.priority === 'HIGH' ? 'badge-rose' : 'badge-amber'}`} style={{ fontSize: '0.65rem' }}>
-                        {t.status}
-                      </span>
-                    </div>
+            <div className="table-scroll-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: 'calc(100vh - 360px)', minHeight: '400px' }}>
+              {isLoadingTickets ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Loader2 size={20} className="animate-spin" style={{ margin: '0 auto 8px auto', display: 'block' }} />
+                  <span>Memuat antrean tiket dari database...</span>
+                </div>
+              ) : tickets.length === 0 ? (
+                <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <CheckCircle2 size={36} color="var(--emerald-400)" style={{ margin: '0 auto 8px auto', display: 'block', opacity: 0.5 }} />
+                  <p style={{ fontWeight: 600, color: '#ffffff', margin: '0 0 4px 0' }}>Antrean Tiket Bersih</p>
+                  <p style={{ fontSize: '0.78rem', margin: 0 }}>Tidak ada kendala pengguna atau tiket HITL yang membutuhkan tinjauan saat ini.</p>
+                </div>
+              ) : (
+                tickets.map((t) => {
+                  const isSelected = selectedTicket && t.id === selectedTicket.id;
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => setSelectedTicketId(t.id)}
+                      style={{
+                        padding: '14px',
+                        borderRadius: 'var(--radius-md)',
+                        background: isSelected ? 'rgba(6, 182, 212, 0.12)' : 'rgba(255,255,255,0.02)',
+                        border: isSelected ? '1px solid var(--cyan-500)' : '1px solid var(--border-subtle)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--cyan-400)', fontWeight: 600 }}>
+                          {t.ticketNumber}
+                        </span>
+                        <span className={`badge ${t.status === 'RESOLVED' ? 'badge-emerald' : t.priority === 'HIGH' ? 'badge-rose' : 'badge-amber'}`} style={{ fontSize: '0.65rem' }}>
+                          {t.status}
+                        </span>
+                      </div>
 
-                    <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#ffffff' }}>
-                      {t.subject}
-                    </div>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#ffffff' }}>
+                        {t.subject}
+                      </div>
 
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      {t.tenantName} ({t.userPhone})
-                    </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {t.tenantName} ({t.userPhone})
+                      </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      <span>AI Confidence: <strong style={{ color: (t.aiConfidenceScore ?? 75) < 70 ? 'var(--rose-400)' : 'var(--emerald-400)' }}>{t.aiConfidenceScore ?? 75}%</strong></span>
-                      <span>{t.createdAt}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        <span>AI Confidence: <strong style={{ color: (t.aiConfidenceScore ?? 75) < 70 ? 'var(--rose-400)' : 'var(--emerald-400)' }}>{t.aiConfidenceScore ?? 75}%</strong></span>
+                        <span>{t.createdAt}</span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
           {/* Right: Ticket Detail & Human-in-the-Loop Action Desk */}
-          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--cyan-400)' }}>
-                    {selectedTicket.ticketNumber} • Kategori: {selectedTicket.category}
-                  </span>
-                  <h3 style={{ fontSize: '1.2rem', color: '#ffffff', marginTop: '4px' }}>
-                    {selectedTicket.subject}
-                  </h3>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Pelapor: <strong>{selectedTicket.tenantName}</strong> • Kontak: {selectedTicket.userPhone}
-                  </div>
-                </div>
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px', position: 'sticky', top: '20px', alignSelf: 'start', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
+            {selectedTicket ? (
+              <>
+                <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--cyan-400)' }}>
+                        {selectedTicket.ticketNumber} • Kategori: {selectedTicket.category}
+                      </span>
+                      <h3 style={{ fontSize: '1.2rem', color: '#ffffff', marginTop: '4px' }}>
+                        {selectedTicket.subject}
+                      </h3>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Pelapor: <strong>{selectedTicket.tenantName}</strong> • Kontak: {selectedTicket.userPhone}
+                      </div>
+                    </div>
 
-                <div style={{ textAlign: 'right' }}>
-                  <span className={`badge ${selectedTicket.priority === 'HIGH' ? 'badge-rose' : 'badge-amber'}`}>
-                    Prioritas: {selectedTicket.priority}
-                  </span>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    <Clock size={11} style={{ display: 'inline', marginRight: '4px' }} />
-                    {selectedTicket.createdAt}
+                    <div style={{ textAlign: 'right' }}>
+                      <span className={`badge ${selectedTicket.priority === 'HIGH' ? 'badge-rose' : 'badge-amber'}`}>
+                        Prioritas: {selectedTicket.priority}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        <Clock size={11} style={{ display: 'inline', marginRight: '4px' }} />
+                        {selectedTicket.createdAt}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
             {/* Description Box */}
             <div style={{
@@ -359,56 +377,65 @@ export const CSSupportDeskView: React.FC<CSSupportDeskViewProps> = ({
                 }}
               />
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => alert('Kosakata telah diperbarui di database leksikon pgvector.')}
-                >
-                  <FileText size={15} />
-                  <span>Update Kamus Dialek</span>
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => alert('Kosakata telah diperbarui di database leksikon pgvector.')}
+                  >
+                    <FileText size={15} />
+                    <span>Update Kamus Dialek</span>
+                  </button>
 
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setIsResolveConfirmOpen(true)}
-                  disabled={isProcessing || selectedTicket.status === 'RESOLVED'}
-                >
-                  {isProcessing ? (
-                    <span>Memproses...</span>
-                  ) : selectedTicket.status === 'RESOLVED' ? (
-                    <>
-                      <CheckCircle2 size={15} />
-                      <span>Tiket Telah Selesai</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={15} />
-                      <span>Setujui HITL & Selesaikan Tiket</span>
-                    </>
-                  )}
-                </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setIsResolveConfirmOpen(true)}
+                    disabled={isProcessing || selectedTicket.status === 'RESOLVED'}
+                  >
+                    {isProcessing ? (
+                      <span>Memproses...</span>
+                    ) : selectedTicket.status === 'RESOLVED' ? (
+                      <>
+                        <CheckCircle2 size={15} />
+                        <span>Tiket Telah Selesai</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={15} />
+                        <span>Setujui HITL & Selesaikan Tiket</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)' }}>
+              <LifeBuoy size={48} style={{ opacity: 0.3, margin: '0 auto 12px auto', display: 'block' }} />
+              <p style={{ fontWeight: 600, color: '#ffffff', margin: '0 0 6px 0' }}>Tidak Ada Tiket Terpilih</p>
+              <p style={{ fontSize: '0.82rem', margin: 0 }}>Pilih salah satu tiket di antrean sebelah kiri untuk meninjau detail dan merespons kendala pedagang.</p>
             </div>
-          </div>
+          )}
         </div>
-      </main>
+      </div>
+    </main>
 
-      {/* CS Logout Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={isLogoutConfirmOpen}
-        variant="danger"
-        title="Konfirmasi Keluar Sesi Staf CS"
-        message="Apakah Anda yakin ingin keluar dari konsol operasional dukungan? Tiket yang sedang ditinjau akan tetap tersimpan di antrean."
-        confirmLabel="Ya, Keluar"
-        cancelLabel="Batal"
-        onConfirm={() => {
-          setIsLogoutConfirmOpen(false);
-          onLogout();
-        }}
-        onCancel={() => setIsLogoutConfirmOpen(false)}
-      />
+    {/* CS Logout Confirmation Dialog */}
+    <ConfirmDialog
+      isOpen={isLogoutConfirmOpen}
+      variant="danger"
+      title="Konfirmasi Keluar Sesi Staf CS"
+      message="Apakah Anda yakin ingin keluar dari konsol operasional dukungan? Tiket yang sedang ditinjau akan tetap tersimpan di antrean."
+      confirmLabel="Ya, Keluar"
+      cancelLabel="Batal"
+      onConfirm={() => {
+        setIsLogoutConfirmOpen(false);
+        onLogout();
+      }}
+      onCancel={() => setIsLogoutConfirmOpen(false)}
+    />
 
-      {/* Resolve Ticket Confirmation Dialog */}
+    {/* Resolve Ticket Confirmation Dialog */}
+    {selectedTicket && (
       <ConfirmDialog
         isOpen={isResolveConfirmOpen}
         variant="primary"
@@ -423,6 +450,7 @@ export const CSSupportDeskView: React.FC<CSSupportDeskViewProps> = ({
         }}
         onCancel={() => setIsResolveConfirmOpen(false)}
       />
+    )}
     </div>
   );
 };

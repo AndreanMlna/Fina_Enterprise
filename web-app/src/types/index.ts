@@ -1,12 +1,32 @@
 export type NavigationTab = 
   | 'cockpit'
+  | 'pos'
   | 'ledger'
   | 'montecarlo'
   | 'loan_deobfuscator'
   | 'forensics'
   | 'b2b_benchmark'
   | 'ar_dunning'
-  | 'voice_dialect';
+  | 'voice_dialect'
+  | 'staff';
+
+export interface StaffMember {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  role: UserRole;
+  tenant_id: string;
+  is_active: boolean;
+  created_at?: string;
+  last_login_at?: string;
+}
+
+export interface CreateStaffPayload {
+  full_name: string;
+  phone_number: string;
+  role: 'CASHIER' | 'MANAGER' | 'AUDITOR';
+  pin: string;
+}
 
 export interface KPIStats {
   liquidCash: number;
@@ -114,7 +134,7 @@ export interface ARDunningInvoice {
 
 export interface VoiceDialectSample {
   id: string;
-  dialect: 'JAWA' | 'SUNDA' | 'INDONESIA_PASAR';
+  dialect: 'JAWA' | 'SUNDA' | 'MADURA' | 'INDONESIA_PASAR';
   audioTitle: string;
   rawSpeechText: string;
   detectedEntities: {
@@ -130,7 +150,7 @@ export interface VoiceDialectSample {
   };
 }
 
-export type UserRole = 'OWNER' | 'ACCOUNTANT' | 'AUDITOR';
+export type UserRole = 'OWNER' | 'MANAGER' | 'CASHIER' | 'AUDITOR' | 'STAFF_CS';
 
 export interface Tenant {
   id: string;
@@ -195,6 +215,209 @@ export interface SupportTicket {
   suggestedResolution?: string;
   transactionRef?: string;
   csNotes?: string;
+}
+
+// --- POS (Point of Sale) Data Contracts ---
+
+export interface POSProduct {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  price: number;
+  cogs: number;
+  stock: number;
+  unit: string;
+  image_url?: string;
+}
+
+export interface CreatePOSProductPayload {
+  name: string;
+  sku?: string;
+  category: string;
+  price: number;
+  cogs?: number;
+  stock?: number;
+  unit?: string;
+  image_url?: string;
+}
+
+export interface UpdatePOSProductPayload {
+  name?: string;
+  sku?: string;
+  category?: string;
+  price?: number;
+  cogs?: number;
+  stock?: number;
+  unit?: string;
+  image_url?: string;
+}
+
+export interface POSCartItem {
+  product: POSProduct;
+  quantity: number;
+  discountPercent: number;
+  subtotal: number;
+}
+
+export interface POSCheckoutPayload {
+  items: {
+    product_id: string;
+    product_name: string;
+    sku: string;
+    quantity: number;
+    unit_price: number;
+    cogs: number;
+    discount_percent: number;
+  }[];
+  payment_method: 'CASH' | 'QRIS' | 'TRANSFER';
+  cash_tendered?: number;
+  customer_name?: string;
+  customer_phone?: string;
+  notes?: string;
+}
+
+export interface POSReceiptItem {
+  product_name: string;
+  sku: string;
+  quantity: number;
+  unit_price: number;
+  discount_amount: number;
+  subtotal: number;
+}
+
+export interface POSReceipt {
+  success: boolean;
+  receipt_number: string;
+  journal_entry_number: string;
+  transaction_date: string;
+  tenant_id: string;
+  tenant_name: string;
+  cashier_name: string;
+  customer_name: string;
+  customer_phone?: string;
+  items: POSReceiptItem[];
+  total_items_count: number;
+  subtotal: number;
+  total_discount: number;
+  tax_pp55_estimated: number;
+  grand_total: number;
+  payment_method: string;
+  cash_tendered: number;
+  change_amount: number;
+  audit_merkle_hash: string;
+  qr_snap_url?: string;
+}
+
+export interface CreateInvoicePayload {
+  customer_name: string;
+  customer_phone: string;
+  amount: number;
+  due_date: string;
+  suggested_tone?: 'FRIENDLY' | 'REMINDER' | 'FORMAL_URGENT';
+  snap_qris_url?: string;
+}
+
+export interface PayInvoiceResponse {
+  success: boolean;
+  message: string;
+  invoice_id: string;
+  journal_entry_number: string;
+  audit_merkle_hash: string;
+  amount_settled: number;
+}
+
+export interface LoanEvaluationRecord {
+  id: string;
+  provider_name: string;
+  requested_amount: number;
+  admin_fee_percent: number;
+  upfront_deduction: number;
+  disbursed_amount: number;
+  daily_interest_rate: number;
+  tenor_days: number;
+  total_repayment: number;
+  effective_annual_apr: number;
+  is_legal_ojk: boolean;
+  threat_level: 'SAFE' | 'MODERATE' | 'PREDATORY_EXTREME';
+  notes?: string;
+  created_at: string;
+}
+
+export interface CreateLoanEvaluationPayload {
+  provider_name: string;
+  requested_amount: number;
+  admin_fee_percent: number;
+  daily_interest_rate: number;
+  tenor_days: number;
+  notes?: string;
+}
+
+export interface NationalBenchmarkItem {
+  id: string;
+  commodity_name: string;
+  category: string;
+  unit: string;
+  market_median_price: number;
+  source: string;
+  updated_at: string;
+}
+
+export interface CreateSupplierQuotePayload {
+  supplier_name: string;
+  commodity_name: string;
+  unit: string;
+  purchase_price: number;
+  notes?: string;
+}
+
+export interface ReceiptForensicsRecordItem {
+  id: string;
+  receipt_number: string;
+  merchant_name: string;
+  transaction_date: string;
+  subtotal: number;
+  tax_amount: number;
+  grand_total: number;
+  ela_integrity_score: number;
+  is_tampered: boolean;
+  tampering_details?: string;
+  items: { name: string; qty: number; unitPrice: number; subtotal: number }[];
+  audit_merkle_hash: string;
+  status: string;
+  journal_entry_id?: string;
+  created_at: string;
+}
+
+export interface AnalyzeReceiptPayload {
+  receipt_number: string;
+  merchant_name: string;
+  transaction_date?: string;
+  items: { name: string; qty: number; unitPrice: number; subtotal: number }[];
+  subtotal: number;
+  tax_amount?: number;
+  grand_total: number;
+  simulate_tamper?: boolean;
+}
+
+export interface ParseAndPostDialectPayload {
+  raw_speech_text: string;
+  dialect?: string;
+  action_type?: string;
+  canonical_term?: string;
+  target_coa_code?: string;
+  amount: number;
+}
+
+export interface RunwayBaseline {
+  initial_cash: number;
+  daily_revenue_mean: number;
+  fixed_monthly_cost: number;
+  total_revenue: number;
+  total_expenses: number;
+  active_receivables: number;
+  data_source: string;
+  transaction_count: number;
 }
 
 

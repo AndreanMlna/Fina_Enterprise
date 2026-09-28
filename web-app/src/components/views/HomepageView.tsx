@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   ShieldCheck, 
   ArrowRight, 
-  Bot, 
   Database, 
   Headphones, 
   Sparkles, 
@@ -68,15 +67,6 @@ export const HomepageView: React.FC<HomepageViewProps> = ({ onNavigatePage }) =>
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => onNavigatePage('portal_umkm')}
-            style={{ fontSize: '0.82rem', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Bot size={15} color="var(--emerald-400)" />
-            <span>Coba Demo Dashboard</span>
-          </button>
-
           <button
             className="btn btn-primary"
             onClick={() => onNavigatePage('login')}
@@ -148,19 +138,10 @@ export const HomepageView: React.FC<HomepageViewProps> = ({ onNavigatePage }) =>
           <button
             className="btn btn-primary"
             onClick={() => onNavigatePage('login')}
-            style={{ fontSize: '1rem', padding: '14px 32px', display: 'flex', alignItems: 'center', gap: '10px' }}
+            style={{ fontSize: '1rem', padding: '14px 36px', display: 'flex', alignItems: 'center', gap: '10px' }}
           >
             <span>Mulai Kelola Finansial Usaha</span>
             <ArrowRight size={18} />
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => onNavigatePage('portal_umkm')}
-            style={{ fontSize: '1rem', padding: '14px 28px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Bot size={18} color="var(--emerald-400)" />
-            <span>Eksplorasi Demo Dashboard</span>
           </button>
         </div>
 

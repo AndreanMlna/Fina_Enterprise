@@ -10,6 +10,19 @@
   --border-medium: rgba(255, 255, 255, 0.14);
   --border-accent: rgba(16, 185, 129, 0.35);
   
+  --mint-neon: #00DF8F;
+  --mint-neon-hover: #00c77f;
+  --mint-glow: rgba(0, 223, 143, 0.35);
+  --mint-subtle: rgba(0, 223, 143, 0.12);
+  --mint-text: #00DF8F;
+  
+  --bg-homies-base: #0B1118;
+  --bg-homies-card: #111A24;
+  --bg-homies-card-inner: #16202D;
+  --bg-homies-card-highlight: linear-gradient(135deg, rgba(0, 223, 143, 0.15) 0%, rgba(17, 26, 36, 0.95) 100%);
+  --border-homies: rgba(255, 255, 255, 0.06);
+  --border-homies-active: rgba(0, 223, 143, 0.45);
+  
   --emerald-500: #10b981;
   --emerald-400: #34d399;
   --emerald-600: #059669;
@@ -563,44 +576,62 @@ h1, h2, h3, h4, h5, h6 {
 .nav-sidebar-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
   border-radius: var(--radius-md);
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
   position: relative;
 }
 
 .nav-sidebar-item:hover:not(.active) {
   background: rgba(255, 255, 255, 0.04);
-  border-color: var(--border-subtle);
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
 }
 
 .nav-sidebar-item.active {
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.08) 100%);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(6, 182, 212, 0.08) 100%);
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: inset 3px 0 0 0 var(--emerald-400);
 }
 
 .nav-sidebar-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.nav-sidebar-item:hover:not(.active) .nav-sidebar-icon {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .nav-sidebar-icon.active {
   background: rgba(16, 185, 129, 0.2);
   color: var(--emerald-400);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+/* Utilitas scrollbar tersembunyi */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* ==========================================================================
@@ -614,6 +645,323 @@ h1, h2, h3, h4, h5, h6 {
 .ledger-table-row:hover {
   background-color: rgba(255, 255, 255, 0.025);
 }
+
+/* ==========================================================================
+   Internal Table Scroll Container & Sticky Table Header
+   ========================================================================== */
+.table-scroll-container {
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-full);
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sticky-table-header th,
+tr.sticky-table-header th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #0c1322 !important;
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+/* ==========================================================================
+   Homies Lab Inspired High-End Dashboard Design System (Skills: high-end-visual-design, ui-ux-pro-max)
+   ========================================================================== */
+.homies-card {
+  background: var(--bg-homies-card);
+  border: 1px solid var(--border-homies);
+  border-radius: 20px;
+  position: relative;
+  transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.homies-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.homies-card-inner {
+  background: var(--bg-homies-card-inner);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.homies-card-highlight {
+  background: var(--bg-homies-card-highlight);
+  border: 1px solid var(--border-homies-active);
+  box-shadow: 0 0 20px rgba(0, 223, 143, 0.12);
+  border-radius: 14px;
+}
+
+.homies-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: none;
+}
+
+.homies-pill-btn.active {
+  background: var(--mint-neon);
+  color: #0B1118;
+  box-shadow: 0 0 14px var(--mint-glow);
+}
+
+.homies-pill-btn:not(.active) {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94A3B8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.homies-pill-btn:not(.active):hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.homies-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94A3B8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.homies-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.homies-table-row {
+  transition: background-color 0.15s ease;
+}
+
+.homies-table-row:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+/* Sidebar 2-Column Squircle Navigation Grid */
+.homies-nav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.homies-nav-tile {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #94A3B8;
+  text-align: center;
+}
+
+.homies-nav-tile:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  transform: translateY(-2px);
+}
+
+.homies-nav-tile.active {
+  background: var(--mint-neon);
+  border-color: var(--mint-neon);
+  color: #0B1118;
+  box-shadow: 0 0 20px var(--mint-glow);
+  transform: translateY(-2px);
+}
+
+.homies-nav-tile.active span {
+  color: #0B1118 !important;
+  font-weight: 700 !important;
+}
+
+.homies-nav-tile.active svg {
+  color: #0B1118 !important;
+  stroke-width: 2.3;
+}
+
+/* Metric Change Pill Badges */
+.homies-badge-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  color: var(--mint-neon);
+  background: rgba(0, 223, 143, 0.12);
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.homies-badge-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.12);
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+/* Sleek Dropdown Select */
+.homies-select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #94A3B8;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.homies-select:hover, .homies-select:focus {
+  background: rgba(255, 255, 255, 0.07);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Horizontal Progress Bars */
+.homies-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.homies-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--mint-neon);
+  box-shadow: 0 0 10px var(--mint-glow);
+  transition: width 0.4s ease;
+}
+
+/* Heatmap Grid & Cells */
+.homies-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.homies-heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  transition: transform 0.15s ease, filter 0.15s ease;
+  cursor: pointer;
+}
+
+.homies-heatmap-cell:hover {
+  transform: scale(1.18);
+  filter: brightness(1.25);
+  z-index: 2;
+}
+
+.homies-heatmap-cell.level-0 {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.homies-heatmap-cell.level-1 {
+  background: rgba(0, 223, 143, 0.25);
+}
+
+.homies-heatmap-cell.level-2 {
+  background: rgba(0, 223, 143, 0.55);
+}
+
+.homies-heatmap-cell.level-3 {
+  background: var(--mint-neon);
+  box-shadow: 0 0 8px var(--mint-glow);
+}
+
+/* Vertical Timeline Stream */
+.homies-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+}
+
+.homies-timeline::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 6px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.homies-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.homies-timeline-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #0B1118;
+  flex-shrink: 0;
+}
+
+.homies-timeline-dot.checkin {
+  background: var(--mint-neon);
+  box-shadow: 0 0 8px var(--mint-glow);
+}
+
+.homies-timeline-dot.checkout {
+  background: #38BDF8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+}
+
+
 
 
 

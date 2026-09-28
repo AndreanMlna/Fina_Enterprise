@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import re
 import uuid
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -105,6 +105,50 @@ class UserProfileSchema(BaseModel):
     last_login_at: Optional[datetime] = None
 
 
+class CreateStaffRequest(BaseModel):
+    full_name: str = Field(
+        ...,
+        min_length=3,
+        max_length=255,
+        examples=["Siti Aminah"],
+        description="Nama lengkap staf karyawan"
+    )
+    phone_number: str = Field(
+        ...,
+        min_length=9,
+        max_length=32,
+        examples=["0812-1111-2222"],
+        description="Nomor WhatsApp aktif staf karyawan"
+    )
+    role: str = Field(
+        ...,
+        examples=["CASHIER"],
+        description="Peran staf: 'CASHIER' (Kasir), 'MANAGER' (Manajer), atau 'AUDITOR' (Auditor)"
+    )
+    pin: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        examples=["123456"],
+        description="6-digit PIN Keamanan Awal Staf"
+    )
+
+
+class StaffProfileSchema(BaseModel):
+    id: str
+    full_name: str
+    phone_number: str
+    role: str
+    tenant_id: str
+    is_active: bool
+    created_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+
+
+class UpdateStaffStatusRequest(BaseModel):
+    is_active: bool = Field(..., description="Status keaktifan akun karyawan (True = Aktif, False = Nonaktif)")
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -157,6 +201,41 @@ async def get_current_user(
         )
 
     return user
+
+
+def require_role(allowed_roles: List[str]):
+    """
+    Higher-order Dependency Factory untuk penegakan RBAC (Role-Based Access Control).
+
+    Menghasilkan FastAPI dependency guard yang memverifikasi bahwa pengguna
+    terautentikasi memiliki role yang termasuk dalam daftar `allowed_roles`.
+
+    Prinsip: Principle of Least Privilege (PoLP) — setiap endpoint hanya dapat
+    diakses oleh role yang secara eksplisit diberikan izin.
+
+    Referensi: COSO Internal Control Framework, ISO 27001 Annex A.9.4,
+    PANDUAN_ARSITEKTUR_DAN_ALUR_SISTEM.md §2.2 (3-Tier Security Guard).
+
+    Args:
+        allowed_roles: Daftar role yang diizinkan (misal: ["OWNER", "MANAGER"]).
+
+    Returns:
+        Dependency callable yang mengembalikan UserCredential jika role valid,
+        atau melemparkan HTTP 403 Forbidden jika role tidak diizinkan.
+    """
+    async def role_checker(
+        current_user: UserCredential = Depends(get_current_user)
+    ) -> UserCredential:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Akses ditolak: Role '{current_user.role}' tidak memiliki izin "
+                    f"untuk operasi ini. Diperlukan salah satu dari: {', '.join(allowed_roles)}."
+                )
+            )
+        return current_user
+    return role_checker
 
 
 # --- Endpoints ---
@@ -410,3 +489,200 @@ async def get_my_profile(current_user: UserCredential = Depends(get_current_user
         user=user_profile,
         tenant=tenant_summary
     )
+
+
+# --- Enterprise Staff Management Endpoints (RBAC Provisioning) ---
+@router.get("/staff", response_model=List[StaffProfileSchema], summary="Daftar Karyawan Toko (Multi-Tenant RBAC)")
+async def list_staff_members(
+    current_user: UserCredential = Depends(require_role(["OWNER", "MANAGER"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mengambil daftar seluruh staf karyawan (Kasir, Manajer, Auditor) yang terdaftar
+    di bawah naungan tenant_id pemanggil saat ini.
+    Otoritas akses: OWNER dan MANAGER.
+    """
+    stmt = (
+        select(UserCredential)
+        .where(UserCredential.tenant_id == current_user.tenant_id)
+        .order_by(UserCredential.created_at.asc())
+    )
+    result = await db.scalars(stmt)
+    staff_list = result.all()
+
+    return [
+        StaffProfileSchema(
+            id=s.id,
+            full_name=s.full_name,
+            phone_number=s.phone_number,
+            role=s.role,
+            tenant_id=s.tenant_id,
+            is_active=s.is_active,
+            created_at=s.created_at,
+            last_login_at=s.last_login_at
+        )
+        for s in staff_list
+    ]
+
+
+@router.post("/staff", response_model=StaffProfileSchema, status_code=status.HTTP_201_CREATED, summary="Pendaftaran Staf Baru oleh Owner")
+async def create_staff_member(
+    payload: CreateStaffRequest,
+    current_user: UserCredential = Depends(require_role(["OWNER"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mendaftarkan karyawan baru (Kasir / Manajer / Auditor) ke dalam tenant toko milik Owner.
+    Prinsip Enterprise RBAC:
+    1. Hanya role OWNER yang berwenang mengangkat atau memprovisi karyawan.
+    2. Karyawan otomatis diikat ke tenant_id milik Owner.
+    3. PIN di-hash menggunakan PBKDF2-HMAC-SHA256 (100.000 iterasi).
+    """
+    # 1. Validasi peran yang diperbolehkan untuk diprovisi
+    target_role = payload.role.strip().upper()
+    allowed_staff_roles = {"CASHIER", "MANAGER", "AUDITOR"}
+    if target_role not in allowed_staff_roles:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Peran tidak valid. Peran staf yang diizinkan: {', '.join(sorted(allowed_staff_roles))}."
+        )
+
+    # 2. Validasi format PIN 6-digit numerik
+    if not (payload.pin.isdigit() and len(payload.pin) == 6):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="PIN keamanan staf harus persis terdiri dari 6 digit angka numerik."
+        )
+
+    # 3. Validasi keunikan nomor telepon
+    cleaned_phone = normalize_phone(payload.phone_number)
+    raw_phone = payload.phone_number.strip()
+    clean_db_phone = func.replace(func.replace(func.replace(UserCredential.phone_number, "-", ""), " ", ""), "+62", "0")
+
+    existing_user = await db.scalar(
+        select(UserCredential).where(
+            or_(
+                UserCredential.phone_number == raw_phone,
+                UserCredential.phone_number == cleaned_phone,
+                clean_db_phone == cleaned_phone
+            )
+        )
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Nomor WhatsApp '{raw_phone}' sudah terdaftar dalam sistem. Gunakan nomor WhatsApp lain untuk staf ini."
+        )
+
+    # 4. Buat akun staf terikat ke tenant_id milik Owner
+    user_id = f"usr-{uuid.uuid4().hex[:8]}"
+    hashed_pin = hash_pin(payload.pin)
+
+    new_staff = UserCredential(
+        id=user_id,
+        tenant_id=current_user.tenant_id,
+        phone_number=raw_phone,
+        pin_hash=hashed_pin,
+        role=target_role,
+        full_name=payload.full_name.strip(),
+        is_active=True,
+        failed_attempts=0,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.add(new_staff)
+    await db.commit()
+    await db.refresh(new_staff)
+
+    return StaffProfileSchema(
+        id=new_staff.id,
+        full_name=new_staff.full_name,
+        phone_number=new_staff.phone_number,
+        role=new_staff.role,
+        tenant_id=new_staff.tenant_id,
+        is_active=new_staff.is_active,
+        created_at=new_staff.created_at,
+        last_login_at=new_staff.last_login_at
+    )
+
+
+@router.patch("/staff/{user_id}/status", response_model=StaffProfileSchema, summary="Ubah Status Keaktifan Staf")
+async def update_staff_status(
+    user_id: str,
+    payload: UpdateStaffStatusRequest,
+    current_user: UserCredential = Depends(require_role(["OWNER"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mengaktifkan atau menonaktifkan akun karyawan dalam tenant.
+    Owner dilarang menonaktifkan akun miliknya sendiri.
+    """
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pemilik Usaha (Owner) tidak dapat menonaktifkan akun sendiri."
+        )
+
+    stmt = select(UserCredential).where(
+        UserCredential.id == user_id,
+        UserCredential.tenant_id == current_user.tenant_id
+    )
+    staff = await db.scalar(stmt)
+    if not staff:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Akun staf tidak ditemukan dalam entitas usaha Anda."
+        )
+
+    staff.is_active = payload.is_active
+    await db.commit()
+    await db.refresh(staff)
+
+    return StaffProfileSchema(
+        id=staff.id,
+        full_name=staff.full_name,
+        phone_number=staff.phone_number,
+        role=staff.role,
+        tenant_id=staff.tenant_id,
+        is_active=staff.is_active,
+        created_at=staff.created_at,
+        last_login_at=staff.last_login_at
+    )
+
+
+@router.delete("/staff/{user_id}", summary="Hapus Akun Staf Karyawan")
+async def delete_staff_member(
+    user_id: str,
+    current_user: UserCredential = Depends(require_role(["OWNER"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menghapus akun karyawan dari tenant toko.
+    Owner dilarang menghapus akun miliknya sendiri.
+    """
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pemilik Usaha (Owner) tidak dapat menghapus akun sendiri."
+        )
+
+    stmt = select(UserCredential).where(
+        UserCredential.id == user_id,
+        UserCredential.tenant_id == current_user.tenant_id
+    )
+    staff = await db.scalar(stmt)
+    if not staff:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Akun staf tidak ditemukan dalam entitas usaha Anda."
+        )
+
+    deleted_id = staff.id
+    deleted_name = staff.full_name
+    await db.delete(staff)
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Akun karyawan '{deleted_name}' berhasil dihapus dari entitas usaha.",
+        "user_id": deleted_id
+    }

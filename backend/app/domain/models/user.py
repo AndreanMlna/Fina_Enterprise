@@ -11,7 +11,7 @@ class UserCredential(Base):
     tenant_id: Mapped[str] = mapped_column(String(64), ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     pin_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(32), default="OWNER")  # 'OWNER', 'STAFF_CS', 'FINANCE_ADMIN', 'AUDITOR'
+    role: Mapped[str] = mapped_column(String(32), default="OWNER")  # 'OWNER', 'MANAGER', 'CASHIER', 'AUDITOR', 'STAFF_CS'
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)

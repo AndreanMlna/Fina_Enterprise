@@ -4,6 +4,10 @@ from app.domain.models.ledger import Account, AccountCategory, JournalEntry, Jou
 from app.domain.models.dialect import DialectLexicon
 from app.domain.models.invoice import Invoice, InvoiceStatus, DunningTone
 from app.domain.models.support import SupportTicket, TicketCategory, TicketPriority, TicketStatus
+from app.domain.models.product import Product, POSReceiptRecord
+from app.domain.models.loan import LoanEvaluation
+from app.domain.models.benchmark import CommodityBenchmark, SupplierQuote
+from app.domain.models.forensics import ReceiptForensicsRecord
 
 __all__ = [
     "Tenant",
@@ -20,4 +24,10 @@ __all__ = [
     "TicketCategory",
     "TicketPriority",
     "TicketStatus",
+    "Product",
+    "POSReceiptRecord",
+    "LoanEvaluation",
+    "CommodityBenchmark",
+    "SupplierQuote",
+    "ReceiptForensicsRecord",
 ]

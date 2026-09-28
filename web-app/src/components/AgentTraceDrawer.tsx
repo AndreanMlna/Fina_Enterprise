@@ -178,7 +178,23 @@ export const AgentTraceDrawer: React.FC<AgentTraceDrawerProps> = ({
         gap: '12px',
         fontFamily: "'JetBrains Mono', monospace"
       }}>
-        {filteredEvents.map((evt) => (
+        {filteredEvents.length === 0 ? (
+          <div style={{
+            padding: '36px 16px',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '0.8rem',
+            border: '1px dashed var(--border-subtle)',
+            borderRadius: 'var(--radius-md)'
+          }}>
+            <Terminal size={28} color="var(--emerald-400)" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+            <p style={{ color: '#ffffff', marginBottom: '4px' }}>Telemetry Stream Aktif & Standby</p>
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+              Belum ada event tercatat pada filter modul ini. Aktivitas transaksi, audit pgvector, dan auto-posting SAK EMKM akan muncul secara langsung di sini.
+            </p>
+          </div>
+        ) : (
+          filteredEvents.map((evt) => (
           <div
             key={evt.id}
             style={{
@@ -233,7 +249,7 @@ export const AgentTraceDrawer: React.FC<AgentTraceDrawerProps> = ({
               {evt.details}
             </div>
           </div>
-        ))}
+        )))}
       </div>
 
       {/* Drawer Footer Telemetry */}

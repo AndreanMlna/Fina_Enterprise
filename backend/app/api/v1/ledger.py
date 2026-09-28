@@ -14,11 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from app.api.v1.auth import get_current_user
+from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, JournalEntry, JournalLine, Account, AccountCategory
+from app.domain.services import AccountingService
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/ledger", tags=["Ledger & Buku Besar SAK EMKM"])
+
+# RBAC Guard: Buku besar hanya dapat diakses oleh peran manajerial dan auditor
+_require_ledger_access = require_role(["OWNER", "MANAGER", "AUDITOR"])
 
 
 # --- Pydantic Response Schemas ---
@@ -82,7 +86,7 @@ class SAKEMKMReportSchema(BaseModel):
     summary="Daftar Jurnal Pembukuan Tenant (Tenant-Scoped)"
 )
 async def list_journal_entries(
-    current_user: UserCredential = Depends(get_current_user),
+    current_user: UserCredential = Depends(_require_ledger_access),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0)
@@ -135,7 +139,7 @@ async def list_journal_entries(
     summary="Chart of Accounts (COA) Bagan Akun Standar SAK EMKM"
 )
 async def list_accounts(
-    current_user: UserCredential = Depends(get_current_user),
+    current_user: UserCredential = Depends(_require_ledger_access),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -165,88 +169,13 @@ async def list_accounts(
     summary="Laporan Keuangan SAK EMKM (Computed dari Database Riil)"
 )
 async def get_sak_emkm_report(
-    current_user: UserCredential = Depends(get_current_user),
+    current_user: UserCredential = Depends(_require_ledger_access),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Menghitung laporan keuangan SAK EMKM secara real-time dari data jurnal aktual.
-    Laporan ini di-compute langsung dari tabel journal_lines yang sudah di-posting,
-    bukan dari data statis.
+    Komputasi dan pembuktian matematis didelegasikan ke Accounting Domain Service (Clean Architecture).
     """
-    # Ambil semua akun dengan saldo terkini
-    stmt = select(Account).order_by(Account.code)
-    result = await db.execute(stmt)
-    accounts = result.scalars().all()
+    report_data = await AccountingService.compute_sak_emkm_report(db, current_user.tenant_id)
+    return SAKEMKMReportSchema(**report_data)
 
-    # Hitung saldo riil dari journal lines milik tenant ini
-    lines_stmt = (
-        select(JournalLine.account_id, func.sum(JournalLine.debit).label("total_debit"), func.sum(JournalLine.credit).label("total_credit"))
-        .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
-        .where(JournalEntry.tenant_id == current_user.tenant_id)
-        .group_by(JournalLine.account_id)
-    )
-    lines_result = await db.execute(lines_stmt)
-    account_balances = {row.account_id: {"debit": float(row.total_debit or 0), "credit": float(row.total_credit or 0)} for row in lines_result}
-
-    current_assets = []
-    non_current_assets = []
-    liabilities = []
-    equity = []
-    revenues = []
-    expenses = []
-
-    for acct in accounts:
-        bal = account_balances.get(acct.id, {"debit": 0, "credit": 0})
-        cat = acct.category.value if isinstance(acct.category, AccountCategory) else str(acct.category)
-
-        # Hitung saldo netto berdasarkan normal balance
-        if acct.normal_balance == "DEBIT":
-            net = bal["debit"] - bal["credit"]
-        else:
-            net = bal["credit"] - bal["debit"]
-
-        item = FinancialLineItem(name=f"{acct.code} - {acct.name}", amount=net)
-
-        if cat == "ASSET":
-            if acct.code.startswith("12"):
-                non_current_assets.append(item)
-            else:
-                current_assets.append(item)
-        elif cat == "LIABILITY":
-            liabilities.append(item)
-        elif cat == "EQUITY":
-            equity.append(item)
-        elif cat == "REVENUE":
-            revenues.append(item)
-        elif cat == "EXPENSE":
-            expenses.append(item)
-
-    total_assets = sum(a.amount for a in current_assets) + sum(a.amount for a in non_current_assets)
-    total_liabilities = sum(l.amount for l in liabilities)
-    total_equity = sum(e.amount for e in equity)
-    total_revenue = sum(r.amount for r in revenues)
-    total_expenses = sum(e.amount for e in expenses)
-
-    gross_profit = total_revenue
-    net_income = total_revenue - total_expenses
-
-    import hashlib
-    hash_input = f"{total_assets}:{total_liabilities}:{total_equity}:{net_income}"
-    audit_hash = f"sha256:{hashlib.sha256(hash_input.encode()).hexdigest()}"
-
-    return SAKEMKMReportSchema(
-        period="Periode Berjalan (1 Januari 2026 s.d. Hari Ini)",
-        total_assets=total_assets,
-        total_liabilities_and_equity=total_liabilities + total_equity + net_income,
-        current_assets=current_assets,
-        non_current_assets=non_current_assets,
-        liabilities=liabilities,
-        equity=equity,
-        revenue=total_revenue,
-        cogs=0,
-        gross_profit=gross_profit,
-        operational_expenses=expenses,
-        net_income_before_tax=net_income,
-        is_balanced=abs(total_assets - (total_liabilities + total_equity + net_income)) < 0.01,
-        audit_merkle_hash=audit_hash
-    )

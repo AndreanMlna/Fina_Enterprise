@@ -20,3 +20,4 @@ class Tenant(Base):
     journal_entries = relationship("JournalEntry", back_populates="tenant", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="tenant", cascade="all, delete-orphan")
     tickets = relationship("SupportTicket", back_populates="tenant", cascade="all, delete-orphan")
+    products = relationship("Product", back_populates="tenant", cascade="all, delete-orphan")
