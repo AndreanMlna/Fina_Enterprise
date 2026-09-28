@@ -24,9 +24,8 @@
 4. [Tata Kelola Keamanan & Kepatuhan Regulasi](#4-tata-kelola-keamanan--kepatuhan-regulasi)
 5. [Struktur Direktori Repositori](#5-struktur-direktori-repositori)
 6. [Panduan Instalasi & Menjalankan di Lokal](#6-panduan-instalasi--menjalankan-di-lokal)
-7. [Kredensial Akun Uji Coba (Demo Credentials)](#7-kredensial-akun-uji-coba-demo-credentials)
-8. [Pengujian & Verifikasi Mutu Kode](#8-pengujian--verifikasi-mutu-kode)
-9. [Kontributor & Lisensi](#9-kontributor--lisensi)
+7. [Pengujian & Verifikasi Mutu Kode](#7-pengujian--verifikasi-mutu-kode)
+8. [Kontributor & Lisensi](#8-kontributor--lisensi)
 
 ---
 
@@ -211,19 +210,7 @@ Buka browser Anda dan akses: `http://localhost:5173`
 
 ---
 
-## 7. Kredensial Akun Uji Coba (Demo Credentials)
-
-Tenant bawaan: **PT Abadi Nan Jaya** (`t-9cda0c7d`)
-
-| Peran (Role) | Nama Personel | Nomor WhatsApp | Kode PIN | Hak Akses |
-| :--- | :--- | :--- | :---: | :--- |
-| **OWNER** | andrian maulana | `081249992243` | `611059` | **Akses Penuh**: Cockpit, Buku Besar, Audit, Staf |
-| **MANAGER** | Rian Pratama | `081388220011` | `123456` | **Operasional**: Stok, Forensik Nota, Benchmark |
-| **CASHIER** | Siti Aminah | `085711223344` | `654321` | **Khusus Kasir**: Terminal POS Kasir & Transaksi |
-
----
-
-## 8. Pengujian & Verifikasi Mutu Kode
+## 7. Pengujian & Verifikasi Mutu Kode
 
 ### Pengujian Backend:
 ```bash
@@ -246,7 +233,7 @@ Memverifikasi:
 
 ---
 
-## 9. Kontributor & Lisensi
+## 8. Kontributor & Lisensi
 
 - **Lead Architect & Developer**: [andrian maulana](https://github.com/AndreanMlna)
 - **Repositori**: [GitHub - AndreanMlna/Fina_Enterprise](https://github.com/AndreanMlna/Fina_Enterprise.git)
