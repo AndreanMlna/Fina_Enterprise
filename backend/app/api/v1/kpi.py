@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, JournalEntry, JournalLine, Account, AccountCategory, Invoice, InvoiceStatus
 from app.domain.services import AccountingService
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/kpi", tags=["Executive KPI Dashboard"])
@@ -190,3 +191,28 @@ async def get_runway_baseline(
         data_source="REAL_JOURNAL" if len(rows) > 0 else "DEFAULT_CALIBRATED",
         transaction_count=len(rows)
     )
+
+
+@router.get(
+    "/orchestrator-cycle",
+    summary="FinOrchestrator Autonomous Cognitive Cycle (Perceive -> Reason -> Act)"
+)
+async def run_orchestrator_cycle(
+    current_user: UserCredential = Depends(_require_executive),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Siklus penalaran otonom agen FinOrchestrator:
+    1. PERCEIVE: Membaca status kas likuid riil, batas pengaman, runway, dan piutang tertunggak dari PostgreSQL.
+    2. REASON: Menilai kondisi neraca & menentukan apakah terjadi surplus kas menganggur atau ancaman likuiditas.
+    3. ACT: Menerbitkan direktif aksi eksekutif otomatis (Sweeping kas, dunning reminder, opex freezing).
+    """
+    dashboard_kpi = await get_kpi_dashboard(current_user=current_user, db=db)
+    cycle_result = ai_service.evaluate_autonomous_orchestrator(
+        liquid_cash=dashboard_kpi.liquid_cash,
+        safety_buffer=dashboard_kpi.safety_buffer,
+        runway_days=int(dashboard_kpi.cash_runway_days),
+        overdue_ar=dashboard_kpi.active_accounts_receivable
+    )
+    cycle_result["kpi_snapshot"] = dashboard_kpi.model_dump()
+    return cycle_result

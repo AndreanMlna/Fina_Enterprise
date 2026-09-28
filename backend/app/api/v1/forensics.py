@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 import json
 import uuid
 import hashlib
+import base64
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -27,6 +28,7 @@ from app.domain.services import (
     COA_INVENTORY_RAW,
     COA_OPERATING_EXPENSE
 )
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/forensics", tags=["Receipt Forensics Studio"])
@@ -70,6 +72,7 @@ class AnalyzeReceiptPayload(BaseModel):
     tax_amount: float = Field(default=0.0, ge=0)
     grand_total: float = Field(..., gt=0)
     simulate_tamper: bool = False
+    image_base64: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -148,28 +151,42 @@ async def analyze_receipt(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Menjalankan algoritma Error Level Analysis (ELA) dan audit integritas matematis nota:
+    Menjalankan algoritma Error Level Analysis (ELA) nyata dan audit integritas matematis nota:
     1. Memverifikasi apakah subtotal item cocok dengan total nota (anti-arithmetic tampering).
-    2. Mendeteksi anomali kompresi frekuensi tinggi piksel JPEG / ELA.
-    3. Menerbitkan SHA-256 Merkle hash dan menyimpan hasil audit ke database PostgreSQL.
+    2. Mendeteksi anomali kompresi frekuensi tinggi piksel JPEG / ELA dengan Computer Vision.
+    3. Jika gambar disertakan (Base64), memproses dengan Gemini Multimodal Vision & Pillow ELA Matrix.
+    4. Menerbitkan SHA-256 Merkle hash dan menyimpan hasil audit ke database PostgreSQL.
     """
     now = datetime.now(timezone.utc)
     tgl = payload.transaction_date or now.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Hitung integritas matematika item
-    computed_sum = sum(it.subtotal for it in payload.items) if payload.items else payload.subtotal
-    sum_difference = abs(computed_sum - payload.subtotal)
+    # Decode image jika ada
+    img_bytes = None
+    if payload.image_base64:
+        try:
+            raw_b64 = payload.image_base64
+            if "," in raw_b64:
+                raw_b64 = raw_b64.split(",", 1)[1]
+            img_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            img_bytes = None
 
-    is_tampered = payload.simulate_tamper or (sum_difference > 100.0)
-    if is_tampered:
+    # Jalankan Real AI Service (ELA + Gemini Multimodal Vision + Aritmatika)
+    ai_result = ai_service.analyze_receipt_multimodal(
+        image_bytes=img_bytes,
+        subtotal=payload.subtotal,
+        grand_total=payload.grand_total,
+        items=[it.model_dump() for it in payload.items]
+    )
+
+    ela_score = ai_result["ela_score"]
+    is_tampered = ai_result["is_tampered"] or payload.simulate_tamper
+    tampering_details = ai_result["details"]
+
+    if payload.simulate_tamper and not is_tampered:
+        is_tampered = True
         ela_score = 38
-        tampering_details = (
-            "Anomali kompresi JPEG terdeteksi pada baris subtotal (+420% selisih energi frekuensi tinggi). "
-            "Indikasi manipulasi piksel angka secara digital atau inkonsistensi kalkulasi rincian barang."
-        )
-    else:
-        ela_score = 99
-        tampering_details = None
+        tampering_details = "Simulasi manipulasi digital: Diskontinuitas piksel dan selisih kompresi frekuensi tinggi aktif."
 
     rec_id = f"rf-{uuid.uuid4().hex[:12]}"
     hash_payload = f"{payload.receipt_number}:{current_user.tenant_id}:{payload.grand_total}:{now.isoformat()}:{ela_score}"
@@ -209,6 +226,88 @@ async def analyze_receipt(
         is_tampered=new_record.is_tampered,
         tampering_details=new_record.tampering_details,
         items=payload.items,
+        audit_merkle_hash=new_record.audit_merkle_hash,
+        status=new_record.status,
+        created_at=new_record.created_at.isoformat() if new_record.created_at else ""
+    )
+
+
+@router.post(
+    "/upload-and-analyze",
+    response_model=ReceiptForensicsSchema,
+    status_code=status.HTTP_201_CREATED,
+    summary="Unggah Foto Nota Asli & Analisis Real Computer Vision ELA + Gemini Vision"
+)
+async def upload_and_analyze_receipt(
+    file: UploadFile = File(...),
+    subtotal: float = Form(default=0.0),
+    grand_total: float = Form(default=0.0),
+    receipt_number: Optional[str] = Form(default=None),
+    merchant_name: Optional[str] = Form(default=None),
+    current_user: UserCredential = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menerima berkas gambar fisik nota (JPEG/PNG) langsung dari kamera/unggah file,
+    menghitung matriks ELA piksel riil, dan mengekstrak entitas via Gemini Vision.
+    """
+    now = datetime.now(timezone.utc)
+    img_bytes = await file.read()
+
+    # Eksekusi AI multimodal
+    ai_result = ai_service.analyze_receipt_multimodal(
+        image_bytes=img_bytes,
+        subtotal=subtotal,
+        grand_total=grand_total
+    )
+
+    meta = ai_result.get("vision_metadata") or {}
+    derived_merchant = merchant_name or meta.get("merchant") or f"Toko Rekanan #{uuid.uuid4().hex[:4].upper()}"
+    rand_seq = uuid.uuid4().hex[:4].upper()
+    derived_rcpt_no = receipt_number or f"RCP-{now.strftime('%Y%m')}-{rand_seq}"
+
+    ela_score = ai_result["ela_score"]
+    is_tampered = ai_result["is_tampered"]
+    tampering_details = ai_result["details"]
+
+    rec_id = f"rf-{uuid.uuid4().hex[:12]}"
+    hash_payload = f"{derived_rcpt_no}:{current_user.tenant_id}:{grand_total}:{now.isoformat()}:{ela_score}"
+    merkle_hash = f"sha256:{hashlib.sha256(hash_payload.encode()).hexdigest()}"
+
+    new_record = ReceiptForensicsRecord(
+        id=rec_id,
+        tenant_id=current_user.tenant_id,
+        receipt_number=derived_rcpt_no,
+        merchant_name=derived_merchant,
+        transaction_date=now.strftime("%Y-%m-%d %H:%M:%S"),
+        subtotal=subtotal if subtotal > 0 else grand_total,
+        tax_amount=0.0,
+        grand_total=grand_total if grand_total > 0 else subtotal,
+        ela_integrity_score=ela_score,
+        is_tampered=is_tampered,
+        tampering_details=tampering_details,
+        items_json="[]",
+        audit_merkle_hash=merkle_hash,
+        status="TAMPERED" if is_tampered else "VERIFIED",
+        created_at=now
+    )
+
+    db.add(new_record)
+    await db.commit()
+    await db.refresh(new_record)
+
+    return ReceiptForensicsSchema(
+        id=new_record.id,
+        receipt_number=new_record.receipt_number,
+        merchant_name=new_record.merchant_name,
+        transaction_date=new_record.transaction_date,
+        subtotal=float(new_record.subtotal),
+        tax_amount=float(new_record.tax_amount),
+        grand_total=float(new_record.grand_total),
+        ela_integrity_score=new_record.ela_integrity_score,
+        is_tampered=new_record.is_tampered,
+        tampering_details=new_record.tampering_details,
+        items=[],
         audit_merkle_hash=new_record.audit_merkle_hash,
         status=new_record.status,
         created_at=new_record.created_at.isoformat() if new_record.created_at else ""

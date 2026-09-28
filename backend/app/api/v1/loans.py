@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, LoanEvaluation
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/loans", tags=["Anti-Predatory Loan Deobfuscator"])
@@ -131,6 +132,18 @@ async def create_loan_evaluation(
     else:
         threat_level = "SAFE"
 
+    # Evaluasi naratif risiko & OJK dengan model Gemini AI
+    ai_risk_notes = ai_service.evaluate_loan_threat(
+        provider_name=payload.provider_name,
+        requested_amount=payload.requested_amount,
+        effective_apr=effective_apr,
+        admin_fee_percent=payload.admin_fee_percent,
+        daily_rate=payload.daily_interest_rate,
+        notes=payload.notes
+    )
+
+    final_notes = f"{payload.notes} | AI Diagnosa: {ai_risk_notes}" if payload.notes else ai_risk_notes
+
     loan_id = f"loan-{uuid.uuid4().hex[:12]}"
     new_eval = LoanEvaluation(
         id=loan_id,
@@ -146,7 +159,7 @@ async def create_loan_evaluation(
         effective_annual_apr=effective_apr,
         is_legal_ojk=is_legal_ojk,
         threat_level=threat_level,
-        notes=payload.notes or ("Terdeteksi melampaui batas bunga OJK" if not is_legal_ojk else "Sesuai regulasi OJK"),
+        notes=final_notes,
         created_at=datetime.now(timezone.utc)
     )
 
@@ -169,6 +182,62 @@ async def create_loan_evaluation(
         threat_level=new_eval.threat_level,
         notes=new_eval.notes,
         created_at=new_eval.created_at.isoformat() if new_eval.created_at else ""
+    )
+
+
+@router.post(
+    "/evaluate-preview",
+    response_model=LoanEvaluationSchema,
+    summary="Simulasi Diagnosa Pinjaman Tanpa Menyimpan ke Basis Data"
+)
+async def preview_loan_evaluation(
+    payload: CreateLoanEvaluationPayload,
+    current_user: UserCredential = Depends(_require_manager)
+):
+    """
+    Menghitung APR Efektif dan menghasilkan diagnosa hukum/finansial seketika
+    tanpa menyimpan ke PostgreSQL (mode kalkulator interaktif).
+    """
+    upfront = (payload.requested_amount * payload.admin_fee_percent) / 100.0
+    disbursed = max(1.0, payload.requested_amount - upfront)
+    total_interest = payload.requested_amount * (payload.daily_interest_rate / 100.0) * payload.tenor_days
+    total_repayment = payload.requested_amount + total_interest
+    total_cost = total_repayment - disbursed
+
+    effective_apr = round(((total_cost / disbursed) / payload.tenor_days) * 365.0 * 100.0, 1)
+    is_legal_ojk = effective_apr <= 110.0 and payload.admin_fee_percent <= 10.0
+
+    if effective_apr > 150.0:
+        threat_level = "PREDATORY_EXTREME"
+    elif effective_apr > 50.0:
+        threat_level = "MODERATE"
+    else:
+        threat_level = "SAFE"
+
+    ai_risk = ai_service.evaluate_loan_threat(
+        provider_name=payload.provider_name,
+        requested_amount=payload.requested_amount,
+        effective_apr=effective_apr,
+        admin_fee_percent=payload.admin_fee_percent,
+        daily_rate=payload.daily_interest_rate,
+        notes=payload.notes
+    )
+
+    return LoanEvaluationSchema(
+        id="preview",
+        provider_name=payload.provider_name.strip(),
+        requested_amount=payload.requested_amount,
+        admin_fee_percent=payload.admin_fee_percent,
+        upfront_deduction=upfront,
+        disbursed_amount=disbursed,
+        daily_interest_rate=payload.daily_interest_rate,
+        tenor_days=payload.tenor_days,
+        total_repayment=total_repayment,
+        effective_annual_apr=effective_apr,
+        is_legal_ojk=is_legal_ojk,
+        threat_level=threat_level,
+        notes=ai_risk,
+        created_at=datetime.now(timezone.utc).isoformat()
     )
 
 

@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, DialectLexicon, JournalEntry, JournalLine, Account
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/dialects", tags=["Voice Dialect & Leksikon Lokal"])
@@ -42,6 +43,11 @@ class DialectLexiconSchema(BaseModel):
     sample_sentence: Optional[str] = None
 
 
+class ParseDialectIntentPayload(BaseModel):
+    raw_speech_text: str = Field(..., min_length=2, max_length=500)
+    dialect: str = Field(default="JAWA")
+
+
 class ParseAndPostDialectPayload(BaseModel):
     raw_speech_text: str = Field(..., min_length=2, max_length=500)
     dialect: str = Field(default="JAWA")
@@ -52,6 +58,25 @@ class ParseAndPostDialectPayload(BaseModel):
 
 
 # --- Endpoints ---
+
+@router.post(
+    "/parse-intent",
+    summary="Ekstraksi Entitas Akuntansi Berbasis Suara/Dialek Menggunakan Real Gemini AI"
+)
+async def parse_dialect_intent(
+    payload: ParseDialectIntentPayload,
+    current_user: UserCredential = Depends(_require_manager)
+):
+    """
+    Menganalisis kalimat dialek daerah (Jawa, Sunda, Batak, Minang, Madura, Indonesia Pasar)
+    menggunakan model Gemini 2.0 Flash untuk mengekstrak aksi bisnis (JUAL/BELI), nama barang kanonikal,
+    nominal rupiah, dan kode bagan akun COA SAK EMKM.
+    """
+    return ai_service.parse_dialect_intent(
+        raw_text=payload.raw_speech_text,
+        dialect=payload.dialect
+    )
+
 
 @router.get(
     "",
@@ -102,11 +127,26 @@ async def parse_and_post_dialect_journal(
 ):
     """
     Memproses transkripsi pesan suara dialek lokal dan membukukannya ke basis data PostgreSQL:
-    1. Mencocokkan entitas akun COA target berdasarkan leksikon atau aksi.
+    1. Mengekstrak dan mencocokkan entitas akun COA target berdasarkan Gemini AI atau leksikon.
     2. Menegakkan pembukuan berpasangan seimbang (Debet == Kredit).
     3. Mengunci transaksi dengan rantai kriptografis SHA-256 Merkle Chaining di 'journal_entries'.
     4. Memperbarui saldo buku besar akun secara atomik.
     """
+    # Jika parameter tidak lengkap, gunakan penalaran Gemini AI
+    canonical = payload.canonical_term
+    action = payload.action_type.upper()
+    target_coa = payload.target_coa_code
+
+    if not canonical or not target_coa:
+        ai_parsed = ai_service.parse_dialect_intent(payload.raw_speech_text, dialect=payload.dialect)
+        if not canonical:
+            canonical = ai_parsed.get("canonical_term")
+        if not payload.target_coa_code:
+            target_coa = ai_parsed.get("target_coa_code")
+        if not payload.action_type:
+            action = ai_parsed.get("action_type", "BELI")
+
+    target_coa = target_coa or (ACCOUNT_SALES_REVENUE if action == "JUAL" else ACCOUNT_RAW_MATERIAL)
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
     timestamp_compact = now.strftime("%Y%m%d%H%M%S")

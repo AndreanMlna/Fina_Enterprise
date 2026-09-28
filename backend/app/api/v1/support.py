@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.api.v1.auth import get_current_user
 from app.domain.models import UserCredential, SupportTicket as SupportTicketModel, TicketCategory, TicketPriority, TicketStatus
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/support", tags=["Customer Support & HITL Desk"])
@@ -131,6 +132,13 @@ async def create_ticket(
     except ValueError:
         prio_enum = TicketPriority.MEDIUM
 
+    # Evaluasi diagnostik tiket dengan Gemini AI
+    ai_conf, ai_sol = ai_service.evaluate_support_ticket(
+        subject=payload.title,
+        description=payload.description,
+        category=cat_enum.value
+    )
+
     new_ticket = SupportTicketModel(
         id=ticket_id,
         ticket_number=ticket_number,
@@ -141,12 +149,13 @@ async def create_ticket(
         status=TicketStatus.OPEN,
         subject=payload.title,
         description=payload.description,
-        ai_confidence_score=75,
-        suggested_resolution=None,
+        ai_confidence_score=ai_conf,
+        suggested_resolution=ai_sol,
         created_at=datetime.now(timezone.utc)
     )
     db.add(new_ticket)
-    await db.flush()
+    await db.commit()
+    await db.refresh(new_ticket)
 
     return TicketResponseSchema(
         id=new_ticket.id,
@@ -158,8 +167,8 @@ async def create_ticket(
         status=TicketStatus.OPEN.value,
         subject=new_ticket.subject,
         description=new_ticket.description,
-        ai_confidence_score=75,
-        suggested_resolution=None,
+        ai_confidence_score=new_ticket.ai_confidence_score,
+        suggested_resolution=new_ticket.suggested_resolution,
         created_at=new_ticket.created_at.isoformat()
     )
 

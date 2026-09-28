@@ -33,6 +33,7 @@ from app.domain.services import (
     COA_BANK_GIRO_QRIS,
     COA_ACCOUNTS_RECEIVABLE
 )
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/invoices", tags=["AR Dunning & Piutang Usaha"])
@@ -270,6 +271,52 @@ async def pay_invoice(
     }
 
 
+@router.get(
+    "/{invoice_id}/draft-dunning-message",
+    summary="Susun Draft Pesan Penagihan WhatsApp Dinamis Menggunakan Gemini AI"
+)
+async def draft_dunning_message(
+    invoice_id: str,
+    tone: Optional[str] = Query(None),
+    current_user: UserCredential = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menghasilkan narasi penagihan piutang WhatsApp profesional, ramah, dan solutif
+    menggunakan model Gemini 2.0 Flash berdasarkan umur piutang dan tone psikologis.
+    """
+    stmt = select(Invoice).where(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == current_user.tenant_id
+    )
+    res = await db.execute(stmt)
+    inv = res.scalar_one_or_none()
+
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice tidak ditemukan atau bukan milik tenant Anda."
+        )
+
+    chosen_tone = tone or (inv.suggested_tone.value if isinstance(inv.suggested_tone, DunningTone) else str(inv.suggested_tone))
+    msg = ai_service.generate_dunning_message(
+        customer_name=inv.customer_name,
+        invoice_number=inv.invoice_number,
+        amount=float(inv.amount),
+        days_overdue=inv.days_overdue,
+        tone=chosen_tone,
+        snap_url=inv.snap_qris_url
+    )
+
+    return {
+        "invoice_id": inv.id,
+        "customer_name": inv.customer_name,
+        "customer_phone": inv.customer_phone,
+        "tone": chosen_tone,
+        "draft_message": msg
+    }
+
+
 @router.post(
     "/{invoice_id}/dunning-reminder",
     status_code=status.HTTP_200_OK,
@@ -282,7 +329,8 @@ async def send_dunning_reminder(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Merekam peristiwa pengiriman notifikasi penagihan WhatsApp resmi ke pelanggan.
+    Merekam peristiwa pengiriman notifikasi penagihan WhatsApp resmi ke pelanggan,
+    menggunakan pesan dinamis hasil kurasi AI Gemini.
     """
     stmt = select(Invoice).where(
         Invoice.id == invoice_id,
@@ -304,6 +352,16 @@ async def send_dunning_reminder(
         except ValueError:
             pass
 
+    chosen_tone = inv.suggested_tone.value if isinstance(inv.suggested_tone, DunningTone) else str(inv.suggested_tone)
+    final_message = payload.custom_message or ai_service.generate_dunning_message(
+        customer_name=inv.customer_name,
+        invoice_number=inv.invoice_number,
+        amount=float(inv.amount),
+        days_overdue=inv.days_overdue,
+        tone=chosen_tone,
+        snap_url=inv.snap_qris_url
+    )
+
     await db.commit()
 
     return {
@@ -311,5 +369,6 @@ async def send_dunning_reminder(
         "message": f"Pesan penagihan WhatsApp berhasil dikirim ke {inv.customer_name} ({inv.customer_phone}).",
         "invoice_number": inv.invoice_number,
         "dispatched_at": datetime.now(timezone.utc).isoformat(),
-        "tone": inv.suggested_tone.value
+        "tone": chosen_tone,
+        "sent_message": final_message
     }

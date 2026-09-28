@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, Product, CommodityBenchmark, SupplierQuote
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
 
 router = APIRouter(prefix="/benchmarks", tags=["B2B Price Intelligence"])
@@ -269,3 +270,42 @@ async def delete_supplier_quote(
     await db.delete(q)
     await db.commit()
     return {"success": True, "message": "Kontrak supplier berhasil dihapus."}
+
+
+class MatchCommodityPayload(BaseModel):
+    term: str = Field(..., min_length=2, max_length=100)
+
+
+@router.post(
+    "/match-commodity",
+    summary="Normalisasi Semantik Istilah Belanja Bahan Baku ke Indeks Bapanas Menggunakan Gemini AI"
+)
+async def match_commodity(
+    payload: MatchCommodityPayload,
+    current_user: UserCredential = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mencocokkan istilah pasar/warung (misal: 'beras rojo lele', 'minyak curah')
+    ke data indeks acuan resmi Badan Pangan Nasional (Bapanas) menggunakan penalaran semantik Gemini.
+    """
+    stmt = select(CommodityBenchmark)
+    res = await db.execute(stmt)
+    bms = [
+        {
+            "id": b.id,
+            "commodity_name": b.commodity_name,
+            "category": b.category,
+            "unit": b.unit,
+            "market_median_price": float(b.market_median_price)
+        }
+        for b in res.scalars().all()
+    ]
+    matched_id, conf = ai_service.match_commodity_semantic(payload.term, bms)
+    matched_obj = next((b for b in bms if b["id"] == matched_id), None)
+    return {
+        "term": payload.term,
+        "matched_benchmark": matched_obj,
+        "confidence": conf,
+        "total_benchmarks_scanned": len(bms)
+    }

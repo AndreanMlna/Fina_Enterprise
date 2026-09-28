@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     ENFORCE_PII_MASKING: bool = True
     ENFORCE_DOUBLE_ENTRY_BALANCE: bool = True
 
+    # AI Engine Settings (Google AI Studio Gemini API)
+    # Model default: gemini-3.5-flash-lite (kuota tertinggi 500 RPD / 15 RPM di Google AI Studio) dengan fallback ke gemini-3.8-flash & gemini-3.6-flash
+    GEMINI_API_KEY: str = Field(default="", description="Kunci API Google AI Studio Gemini")
+    GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite", description="Model Gemini resmi (default: gemini-3.5-flash-lite, fallback: gemini-3.8-flash, gemini-3.6-flash)")
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
