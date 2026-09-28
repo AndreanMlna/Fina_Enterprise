@@ -17,8 +17,15 @@ from app.domain.services.accounting_service import (
     COA_OPERATING_EXPENSE
 )
 
+from app.domain.services.inventory_service import (
+    InventoryService,
+    inventory_service
+)
+
 __all__ = [
     "AccountingService",
+    "InventoryService",
+    "inventory_service",
     "COA_CASH_ON_HAND",
     "COA_BANK_GIRO_QRIS",
     "COA_ACCOUNTS_RECEIVABLE",

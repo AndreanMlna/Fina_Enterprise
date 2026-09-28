@@ -154,6 +154,129 @@ class AccountingService:
         await db.flush()
         return entry
 
+    @classmethod
+    async def post_opening_balance(
+        cls,
+        db: AsyncSession,
+        tenant_id: str,
+        lines: List[Dict[str, Any]],
+        effective_date: str,
+        description: str = "Jurnal Saldo Awal (Opening Balance) SAK EMKM",
+    ) -> JournalEntry:
+        """
+        Membukukan N baris jurnal saldo awal dalam 1 transaksi atomik ACID.
+
+        Invariant SAK EMKM (Double-Entry Balancing):
+            Σ Debet ≡ Σ Kredit
+
+        Parameter `lines` berupa list dict: [
+            {"account_code": "1101", "debit": 5000000, "credit": 0, "memo": "Kas tunai awal"},
+            {"account_code": "3101", "debit": 0, "credit": 5000000, "memo": "Modal pemilik"},
+            ...
+        ]
+
+        Validasi:
+        1. Minimal 2 baris jurnal (1 debit, 1 kredit)
+        2. Setiap baris hanya boleh debit ATAU kredit (tidak keduanya)
+        3. Total debit harus sama persis dengan total kredit (zero tolerance)
+        4. Semua kode akun harus ada di COA
+        """
+        from app.domain.rules.sak_emkm_rules import SAKEMKMValidationError
+
+        if not lines or len(lines) < 2:
+            raise SAKEMKMValidationError(
+                "Jurnal saldo awal SAK EMKM minimal harus memiliki 2 baris (1 Debit, 1 Kredit)."
+            )
+
+        # Validasi double-entry balance
+        total_debit = 0.0
+        total_credit = 0.0
+        required_codes: set[str] = set()
+        for line in lines:
+            d = float(line.get("debit", 0))
+            c = float(line.get("credit", 0))
+            if d < 0 or c < 0:
+                raise SAKEMKMValidationError("Nominal tidak boleh negatif.")
+            if d > 0 and c > 0:
+                raise SAKEMKMValidationError(
+                    f"Baris akun {line.get('account_code')}: tidak boleh memiliki debit dan kredit sekaligus."
+                )
+            total_debit += d
+            total_credit += c
+            required_codes.add(str(line["account_code"]))
+
+        if abs(total_debit - total_credit) > 0.01:
+            raise SAKEMKMValidationError(
+                f"Jurnal saldo awal TIDAK BERIMBANG! "
+                f"Total Debit (Rp {total_debit:,.2f}) != Total Kredit (Rp {total_credit:,.2f}). "
+                f"Selisih: Rp {abs(total_debit - total_credit):,.2f}"
+            )
+
+        # Ambil semua akun COA yang dibutuhkan
+        stmt = select(Account).where(Account.code.in_(required_codes))
+        res = await db.execute(stmt)
+        accounts_map = {a.code: a for a in res.scalars().all()}
+
+        # Validasi semua kode akun ada di COA
+        missing_codes = required_codes - set(accounts_map.keys())
+        if missing_codes:
+            raise SAKEMKMValidationError(
+                f"Kode akun berikut tidak ditemukan di Chart of Accounts: {', '.join(sorted(missing_codes))}"
+            )
+
+        # Buat header journal entry
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        entry_num = cls.generate_entry_number("OB")
+
+        hash_payload = f"{entry_num}:{tenant_id}:{effective_date}:{total_debit:.2f}:{now.isoformat()}"
+        merkle_hash = cls.calculate_merkle_hash(hash_payload)
+
+        entry = JournalEntry(
+            id=f"entry-ob-{uuid.uuid4().hex[:12]}",
+            tenant_id=tenant_id,
+            entry_number=entry_num,
+            entry_date=effective_date,
+            description=description,
+            status="POSTED",
+            audit_merkle_hash=merkle_hash,
+        )
+        db.add(entry)
+        await db.flush()
+
+        # Buat semua baris jurnal dan update saldo akun
+        for line_data in lines:
+            code = str(line_data["account_code"])
+            acct = accounts_map[code]
+            debit_val = float(line_data.get("debit", 0))
+            credit_val = float(line_data.get("credit", 0))
+
+            journal_line = JournalLine(
+                id=f"line-ob-{uuid.uuid4().hex[:12]}",
+                entry_id=entry.id,
+                account_id=acct.id,
+                debit=debit_val,
+                credit=credit_val,
+                memo=line_data.get("memo", description),
+            )
+            db.add(journal_line)
+
+            # Update saldo akun sesuai kaidah saldo normal SAK EMKM
+            if debit_val > 0:
+                if acct.normal_balance == "DEBIT":
+                    acct.balance = float(acct.balance or 0) + debit_val
+                else:
+                    acct.balance = float(acct.balance or 0) - debit_val
+
+            if credit_val > 0:
+                if acct.normal_balance == "CREDIT":
+                    acct.balance = float(acct.balance or 0) + credit_val
+                else:
+                    acct.balance = max(0.0, float(acct.balance or 0) - credit_val)
+
+        await db.flush()
+        return entry
+
     @staticmethod
     async def get_tenant_account_balances(
         db: AsyncSession,

@@ -13,6 +13,7 @@ import { authService } from './modules/authService';
 import { ledgerService } from './modules/ledgerService';
 import { posService } from './modules/posService';
 import { operationsService } from './modules/operationsService';
+import { setupService } from './modules/setupService';
 
 // Re-export all type contracts for consumers
 export * from './types';
@@ -53,13 +54,20 @@ class ApiService {
   getKPIDashboard = ledgerService.getKPIDashboard.bind(ledgerService);
   getRunwayBaseline = ledgerService.getRunwayBaseline.bind(ledgerService);
 
-  // --- Domain: Kasir Point of Sale (POS) ---
+  // --- Domain: Kasir Point of Sale (POS) & Pricing Intelligence ---
   getPOSProducts = posService.getPOSProducts.bind(posService);
   createPOSProduct = posService.createPOSProduct.bind(posService);
   updatePOSProduct = posService.updatePOSProduct.bind(posService);
   deletePOSProduct = posService.deletePOSProduct.bind(posService);
   checkoutPOS = posService.checkoutPOS.bind(posService);
   getPOSReceipts = posService.getPOSReceipts.bind(posService);
+  getProductRecipe = posService.getProductRecipe.bind(posService);
+  saveProductRecipe = posService.saveProductRecipe.bind(posService);
+  getPricingAnalysis = posService.getPricingAnalysis.bind(posService);
+  applyRecommendedPrice = posService.applyRecommendedPrice.bind(posService);
+  restockInventory = posService.restockInventory.bind(posService);
+  recordProductionBatch = posService.recordProductionBatch.bind(posService);
+  getMarginLeakageAlerts = posService.getMarginLeakageAlerts.bind(posService);
 
   // --- Domain: Intelijen Harga B2B & Komoditas ---
   getCommodityBenchmarks = operationsService.getCommodityBenchmarks.bind(operationsService);
@@ -92,6 +100,10 @@ class ApiService {
   submitTicket = operationsService.submitTicket.bind(operationsService);
   getTickets = operationsService.getTickets.bind(operationsService);
   updateTicketStatus = operationsService.updateTicketStatus.bind(operationsService);
+
+  // --- Domain: Setup Saldo Awal (Modal Awal) ---
+  getSetupStatus = setupService.getSetupStatus.bind(setupService);
+  postInitialBalance = setupService.postInitialBalance.bind(setupService);
 }
 
 export const api = new ApiService();

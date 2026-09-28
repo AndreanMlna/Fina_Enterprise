@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, Edit2, Trash2 } from 'lucide-react';
+import { Package, Edit2, Trash2, Sparkles } from 'lucide-react';
 import type { POSProduct, POSCartItem } from '../../types';
 import { formatCurrency } from '../../utils';
 
@@ -9,6 +9,7 @@ interface POSProductCardProps {
   onAddToCart: (p: POSProduct) => void;
   onEdit: (p: POSProduct, e: React.MouseEvent) => void;
   onDelete: (p: POSProduct, e: React.MouseEvent) => void;
+  onOpenPricing?: (p: POSProduct, e: React.MouseEvent) => void;
 }
 
 export const POSProductCard: React.FC<POSProductCardProps> = ({
@@ -16,7 +17,8 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
   inCart,
   onAddToCart,
   onEdit,
-  onDelete
+  onDelete,
+  onOpenPricing
 }) => {
   return (
     <div
@@ -50,8 +52,28 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
         </div>
       )}
 
-      {/* Quick Edit/Delete */}
+      {/* Quick Edit/Delete/AI Pricing */}
       <div style={{ position: 'absolute', top: '8px', left: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>
+        {onOpenPricing && (
+          <button
+            type="button"
+            title="AI Resep & Rekomendasi Harga Anti-Rugi"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenPricing(product, e);
+            }}
+            style={{
+              background: 'rgba(15, 23, 42, 0.9)',
+              border: '1px solid rgba(168, 85, 247, 0.6)',
+              color: '#c084fc',
+              borderRadius: '6px',
+              padding: '4px 6px',
+              cursor: 'pointer'
+            }}
+          >
+            <Sparkles size={12} />
+          </button>
+        )}
         <button
           type="button"
           title="Edit Produk"

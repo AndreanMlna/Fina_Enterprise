@@ -8,7 +8,8 @@ export type NavigationTab =
   | 'b2b_benchmark'
   | 'ar_dunning'
   | 'voice_dialect'
-  | 'staff';
+  | 'staff'
+  | 'initial_setup';
 
 export interface StaffMember {
   id: string;
@@ -159,6 +160,7 @@ export interface Tenant {
   npwp: string;
   address: string;
   activeLicense: string;
+  isSetupComplete?: boolean;
 }
 
 export interface AgentTraceEvent {

@@ -6,6 +6,16 @@ import type {
   POSCheckoutPayload, 
   POSReceipt 
 } from '../../types';
+import type {
+  ProductRecipeResponse,
+  SaveRecipePayload,
+  DynamicPricingAnalysis,
+  RestockInventoryPayload,
+  RestockInventoryResponse,
+  ProductionBatchPayload,
+  ProductionBatchResponse,
+  MarginLeakageScanResponse
+} from '../types';
 
 export class POSService {
   /**
@@ -53,6 +63,56 @@ export class POSService {
   async getPOSReceipts(limit: number = 30): Promise<POSReceipt[]> {
     return httpClient.get<POSReceipt[]>(`/api/v1/pos/receipts?limit=${limit}`, []);
   }
+
+  /**
+   * Mengambil komposisi bahan baku (BOM) resep produk
+   */
+  async getProductRecipe(productId: string): Promise<ProductRecipeResponse> {
+    return httpClient.get<ProductRecipeResponse>(`/api/v1/pos/products/${productId}/recipe`);
+  }
+
+  /**
+   * Menyimpan formulasi resep BOM produk dan menghitung ulang HPP
+   */
+  async saveProductRecipe(productId: string, payload: SaveRecipePayload): Promise<any> {
+    return httpClient.post<any>(`/api/v1/pos/products/${productId}/recipe`, payload);
+  }
+
+  /**
+   * Mengambil analisis HPP & rekomendasi harga AI anti-rugi
+   */
+  async getPricingAnalysis(productId: string, targetMargin: number = 35): Promise<DynamicPricingAnalysis> {
+    return httpClient.get<DynamicPricingAnalysis>(`/api/v1/pos/products/${productId}/pricing-analysis?target_margin=${targetMargin}`);
+  }
+
+  /**
+   * Menerapkan harga rekomendasi AI ke katalog produk POS
+   */
+  async applyRecommendedPrice(productId: string, newPrice: number): Promise<any> {
+    return httpClient.put<any>(`/api/v1/pos/products/${productId}/apply-recommended-price`, { new_price: newPrice });
+  }
+
+  /**
+   * Restock bahan baku (Recycle Stock) dengan Moving Weighted Average Cost
+   */
+  async restockInventory(payload: RestockInventoryPayload): Promise<RestockInventoryResponse> {
+    return httpClient.post<RestockInventoryResponse>('/api/v1/pos/inventory/restock', payload);
+  }
+
+  /**
+   * Catat batch produksi (Konversi Bahan Baku -> Produk Jadi)
+   */
+  async recordProductionBatch(payload: ProductionBatchPayload): Promise<ProductionBatchResponse> {
+    return httpClient.post<ProductionBatchResponse>('/api/v1/pos/production/batch', payload);
+  }
+
+  /**
+   * Pindai seluruh katalog produk untuk mendeteksi margin leakage
+   */
+  async getMarginLeakageAlerts(): Promise<MarginLeakageScanResponse> {
+    return httpClient.get<MarginLeakageScanResponse>('/api/v1/pos/pricing/margin-leakage-alerts');
+  }
 }
 
 export const posService = new POSService();
+

@@ -20,6 +20,7 @@ const VoiceDialectView = React.lazy(() => import('./components/views/VoiceDialec
 const StaffManagementView = React.lazy(() => import('./components/views/StaffManagementView').then(m => ({ default: m.StaffManagementView })));
 const CSStaffLoginView = React.lazy(() => import('./components/views/CSStaffLoginView').then(m => ({ default: m.CSStaffLoginView })));
 const CSSupportDeskView = React.lazy(() => import('./components/views/CSSupportDeskView').then(m => ({ default: m.CSSupportDeskView })));
+const InitialSetupView = React.lazy(() => import('./components/views/InitialSetupView').then(m => ({ default: m.InitialSetupView })));
 import { SupportReportModal } from './components/views/SupportReportModal';
 
 import type { NavigationTab, KPIStats, Tenant, UserRole, AppPage, SupportTicket, AgentTraceEvent } from './types';
@@ -59,11 +60,16 @@ export const App: React.FC = () => {
             branchCode: authData.tenant.branch_code,
             npwp: authData.tenant.npwp || '00.000.000.0-000.000',
             address: authData.tenant.address || 'Indonesia',
-            activeLicense: authData.tenant.active_license
+            activeLicense: authData.tenant.active_license,
+            isSetupComplete: (authData.tenant as any).is_setup_complete
           };
           setCurrentTenant(verifiedTenant);
           setUserTenants([verifiedTenant]);
           setUserRole((authData.user.role as UserRole) || 'OWNER');
+          // Onboarding: Jika OWNER belum setup modal/saldo awal, arahkan ke wizard
+          if (authData.user.role === 'OWNER' && !(authData.tenant as any).is_setup_complete) {
+            setActiveTab('initial_setup');
+          }
           // Fetch KPI dashboard dari database riil (hanya untuk peran manajerial — kasir diblokir oleh RBAC backend)
           if (authData.user.role !== 'CASHIER') {
             try {
@@ -234,10 +240,15 @@ export const App: React.FC = () => {
               branchCode: tenantData.branch_code,
               npwp: tenantData.npwp || '00.000.000.0-000.000',
               address: tenantData.address || 'Indonesia',
-              activeLicense: tenantData.active_license
+              activeLicense: tenantData.active_license,
+              isSetupComplete: (tenantData as any).is_setup_complete
             };
             setCurrentTenant(verifiedTenant);
             setUserTenants([verifiedTenant]);
+            // Onboarding Wizard jika OWNER belum set saldo awal
+            if (role === 'OWNER' && !(tenantData as any).is_setup_complete) {
+              setActiveTab('initial_setup');
+            }
           }
           // Segarkan data finansial dari database PostgreSQL riil (hanya untuk peran manajerial)
           if (role !== 'CASHIER') {
@@ -336,6 +347,31 @@ export const App: React.FC = () => {
                 return <VoiceDialectView />;
               case 'staff':
                 return <StaffManagementView isPiiMasked={isPiiMasked} tenant={currentTenant} />;
+              case 'initial_setup':
+                return (
+                  <InitialSetupView 
+                    tenantName={currentTenant?.name}
+                    onSetupComplete={() => {
+                      if (currentTenant) {
+                        setCurrentTenant({ ...currentTenant, isSetupComplete: true });
+                      }
+                      api.getKPIDashboard().then(kpiData => {
+                        if (kpiData) {
+                          setKpi({
+                            liquidCash: kpiData.liquid_cash,
+                            safetyBuffer: kpiData.safety_buffer,
+                            cashRunwayDays: kpiData.cash_runway_days,
+                            financialHealthIndex: kpiData.financial_health_index,
+                            marginLeakageMonthly: kpiData.margin_leakage_monthly,
+                            activeAccountsReceivable: kpiData.active_accounts_receivable,
+                            estimatedTaxPP55: kpiData.estimated_tax_pp55,
+                          });
+                        }
+                      }).catch(() => {});
+                      setActiveTab('cockpit');
+                    }}
+                  />
+                );
               default:
                 return <CockpitView kpi={kpi} onNavigate={setActiveTab} tenant={currentTenant} />;
             }

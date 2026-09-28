@@ -16,6 +16,7 @@ from app.api.v1.pos import router as pos_router
 from app.api.v1.benchmarks import router as benchmarks_router
 from app.api.v1.loans import router as loans_router
 from app.api.v1.forensics import router as forensics_router
+from app.api.v1.setup import router as setup_router
 
 
 @asynccontextmanager
@@ -23,7 +24,7 @@ async def lifespan(app: FastAPI):
     print(f"[{settings.PROJECT_NAME}] Starting up enterprise engine v{settings.VERSION}...")
     print(f"[{settings.PROJECT_NAME}] Database Target: {settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}")
     print(f"[{settings.PROJECT_NAME}] Regulatory: SAK EMKM Double-Entry & UU PDP No. 27/2022 Active")
-    print(f"[{settings.PROJECT_NAME}] API Routers: auth, ledger, invoices, kpi, dialects, support, pos, benchmarks, loans, forensics")
+    print(f"[{settings.PROJECT_NAME}] API Routers: auth, ledger, invoices, kpi, dialects, support, pos, benchmarks, loans, forensics, setup")
     yield
     print(f"[{settings.PROJECT_NAME}] Shutting down gracefully...")
 
@@ -55,6 +56,7 @@ app.include_router(pos_router, prefix=settings.API_V1_STR)
 app.include_router(benchmarks_router, prefix=settings.API_V1_STR)
 app.include_router(loans_router, prefix=settings.API_V1_STR)
 app.include_router(forensics_router, prefix=settings.API_V1_STR)
+app.include_router(setup_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health", tags=["System Telemetry"])

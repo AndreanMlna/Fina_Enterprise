@@ -25,15 +25,52 @@ from app.domain.models import (
     JournalLine,
     Account,
     Product,
-    POSReceiptRecord
+    POSReceiptRecord,
+    ProductRecipeItem,
+    ProductionBatchRecord
 )
 from app.domain.services import (
     AccountingService,
+    InventoryService,
+    inventory_service,
     COA_CASH_ON_HAND,
     COA_BANK_GIRO_QRIS,
-    COA_SALES_REVENUE
+    COA_SALES_REVENUE,
+    COA_INVENTORY_RAW,
+    COA_COGS
 )
+from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
+from app.schemas.pos import (
+    POSProductSchema,
+    CreatePOSProductPayload,
+    UpdatePOSProductPayload,
+    CartItemPayload,
+    POSCheckoutPayload,
+    ReceiptItemSchema,
+    POSReceiptResponse,
+    RecipeItemPayload,
+    SaveRecipePayload,
+    RestockInventoryPayload,
+    ProductionBatchPayload,
+    ApplyPricePayload,
+)
+
+__all__ = [
+    "POSProductSchema",
+    "CreatePOSProductPayload",
+    "UpdatePOSProductPayload",
+    "CartItemPayload",
+    "POSCheckoutPayload",
+    "ReceiptItemSchema",
+    "POSReceiptResponse",
+    "RecipeItemPayload",
+    "SaveRecipePayload",
+    "RestockInventoryPayload",
+    "ProductionBatchPayload",
+    "ApplyPricePayload",
+    "router",
+]
 
 router = APIRouter(prefix="/pos", tags=["Point of Sale (POS) & Kasir UMKM"])
 
@@ -42,93 +79,6 @@ _require_manager = require_role(["OWNER", "MANAGER"])
 
 # --- Domain & Regulatory Constants ---
 PP55_FINAL_TAX_RATE: float = 0.005  # PPh Final PP 55/2022 (0.5% Omzet Bruto)
-
-
-# --- Pydantic Data Contracts ---
-
-class POSProductSchema(BaseModel):
-    id: str
-    name: str
-    sku: str
-    category: str
-    price: float
-    cogs: float = Field(description="Harga Pokok Penjualan / Modal per unit")
-    stock: int
-    unit: str
-    image_url: Optional[str] = None
-
-
-class CreatePOSProductPayload(BaseModel):
-    name: str = Field(min_length=2, max_length=255, description="Nama produk/menu")
-    sku: Optional[str] = Field(default=None, max_length=64, description="Kode SKU atau barcode produk")
-    category: str = Field(default="Makanan", max_length=64, description="Kategori produk (Makanan, Minuman, Camilan, Sembako, dll)")
-    price: float = Field(ge=0, description="Harga jual produk")
-    cogs: float = Field(default=0.0, ge=0, description="Harga Pokok Penjualan / Modal per unit")
-    stock: int = Field(default=0, ge=0, description="Jumlah stok fisik awal")
-    unit: str = Field(default="Porsi", max_length=32, description="Satuan unit (Porsi, Pcs, Botol, Kg, dll)")
-    image_url: Optional[str] = Field(default=None, description="URL gambar produk")
-
-
-class UpdatePOSProductPayload(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=2, max_length=255)
-    sku: Optional[str] = Field(default=None, max_length=64)
-    category: Optional[str] = Field(default=None, max_length=64)
-    price: Optional[float] = Field(default=None, ge=0)
-    cogs: Optional[float] = Field(default=None, ge=0)
-    stock: Optional[int] = Field(default=None, ge=0)
-    unit: Optional[str] = Field(default=None, max_length=32)
-    image_url: Optional[str] = None
-
-
-class CartItemPayload(BaseModel):
-    product_id: str
-    product_name: str
-    sku: str
-    quantity: int = Field(gt=0, description="Kuantitas harus lebih besar dari 0")
-    unit_price: float = Field(ge=0, description="Harga satuan")
-    cogs: float = Field(default=0.0, ge=0)
-    discount_percent: float = Field(default=0.0, ge=0, le=100)
-
-
-class POSCheckoutPayload(BaseModel):
-    items: List[CartItemPayload] = Field(min_length=1, description="Minimal 1 item belanja")
-    payment_method: str = Field(description="'CASH', 'QRIS', atau 'TRANSFER'")
-    cash_tendered: Optional[float] = Field(default=0.0, description="Nominal uang tunai diserahkan pelanggan")
-    customer_name: Optional[str] = Field(default="Pelanggan Umum", description="Nama pembeli")
-    customer_phone: Optional[str] = Field(default=None, description="Nomor WhatsApp untuk nota digital")
-    notes: Optional[str] = None
-
-
-class ReceiptItemSchema(BaseModel):
-    product_name: str
-    sku: str
-    quantity: int
-    unit_price: float
-    discount_amount: float
-    subtotal: float
-
-
-class POSReceiptResponse(BaseModel):
-    success: bool
-    receipt_number: str
-    journal_entry_number: str
-    transaction_date: str
-    tenant_id: str
-    tenant_name: str
-    cashier_name: str
-    customer_name: str
-    customer_phone: Optional[str]
-    items: List[ReceiptItemSchema]
-    total_items_count: int
-    subtotal: float
-    total_discount: float
-    tax_pp55_estimated: float
-    grand_total: float
-    payment_method: str
-    cash_tendered: float
-    change_amount: float
-    audit_merkle_hash: str
-    qr_snap_url: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -557,4 +507,324 @@ async def get_pos_receipts(
             )
         )
     return results
+
+
+# =============================================================================
+# FITUR: DYNAMIC PRICING, BILL OF MATERIALS (BOM), RESTOCK & BATCH PRODUCTION
+# Anti-Margin Leakage: Menjamin UMKM Tidak Rugi di Sepanjang Siklus Bisnis
+# =============================================================================
+
+
+@router.get("/products/{product_id}/recipe", summary="Ambil data resep/BOM (komposisi bahan baku) produk")
+async def get_product_recipe(
+    product_id: str,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mengambil data komposisi bahan baku (Bill of Materials) untuk produk tertentu
+    beserta biaya modal bahan baku per unit terkini.
+    """
+    prod_stmt = select(Product).where(
+        Product.id == product_id,
+        Product.tenant_id == current_user.tenant_id
+    )
+    prod_res = await db.execute(prod_stmt)
+    product = prod_res.scalar_one_or_none()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Produk dengan ID '{product_id}' tidak ditemukan."
+        )
+
+    stmt = select(ProductRecipeItem).where(
+        ProductRecipeItem.product_id == product_id,
+        ProductRecipeItem.tenant_id == current_user.tenant_id
+    ).order_by(ProductRecipeItem.created_at.asc())
+    res = await db.execute(stmt)
+    recipe_items = res.scalars().all()
+
+    items_data = []
+    total_material_cost = 0.0
+    for item in recipe_items:
+        subtotal = float(item.quantity_required) * float(item.cost_per_unit)
+        total_material_cost += subtotal
+        items_data.append({
+            "id": item.id,
+            "material_id": item.material_id,
+            "material_name": item.material_name,
+            "quantity_required": float(item.quantity_required),
+            "unit": item.unit,
+            "cost_per_unit": float(item.cost_per_unit),
+            "subtotal_cost": round(subtotal, 2),
+            "notes": item.notes
+        })
+
+    return {
+        "product_id": product.id,
+        "product_name": product.name,
+        "current_selling_price": float(product.price),
+        "current_cogs": float(product.cogs),
+        "overhead_cost_per_unit": float(product.overhead_cost_per_unit or 0.0),
+        "wastage_percent": float(product.wastage_percent or 0.0),
+        "total_material_cost": round(total_material_cost, 2),
+        "items": items_data
+    }
+
+
+@router.post("/products/{product_id}/recipe", summary="Simpan / perbarui resep BOM & hitung ulang HPP otomatis")
+async def save_product_recipe(
+    product_id: str,
+    payload: SaveRecipePayload,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menyimpan atau memperbarui resep bahan baku (BOM) untuk suatu produk.
+    Sistem otomatis:
+    1. Menyimpan rincian bahan dan takaran per pcs
+    2. Menghitung HPP riil baru (Direct Materials + Wastage + Overhead)
+    3. Memperbarui kolom cogs pada tabel products
+    4. Menjalankan AI Pricing Engine untuk memberikan rekomendasi harga anti-rugi
+    """
+    prod_stmt = select(Product).where(
+        Product.id == product_id,
+        Product.tenant_id == current_user.tenant_id
+    )
+    prod_res = await db.execute(prod_stmt)
+    product = prod_res.scalar_one_or_none()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Produk dengan ID '{product_id}' tidak ditemukan."
+        )
+
+    # 1. Hapus resep lama produk ini
+    del_stmt = select(ProductRecipeItem).where(
+        ProductRecipeItem.product_id == product_id,
+        ProductRecipeItem.tenant_id == current_user.tenant_id
+    )
+    del_res = await db.execute(del_stmt)
+    for old_item in del_res.scalars().all():
+        await db.delete(old_item)
+    await db.flush()
+
+    # 2. Masukkan bahan-bahan baru
+    materials_for_ai = []
+    raw_material_cost = 0.0
+    for item in payload.items:
+        new_item = ProductRecipeItem(
+            id=f"rec-{uuid.uuid4().hex[:12]}",
+            tenant_id=current_user.tenant_id,
+            product_id=product.id,
+            material_id=item.material_id,
+            material_name=item.material_name.strip(),
+            quantity_required=item.quantity_required,
+            unit=item.unit.strip(),
+            cost_per_unit=item.cost_per_unit,
+            notes=item.notes
+        )
+        db.add(new_item)
+        subtotal = float(item.quantity_required) * float(item.cost_per_unit)
+        raw_material_cost += subtotal
+        materials_for_ai.append({
+            "material_name": item.material_name.strip(),
+            "quantity_required": float(item.quantity_required),
+            "unit": item.unit.strip(),
+            "cost_per_unit": float(item.cost_per_unit)
+        })
+
+    # 3. Update atribut produk
+    wastage_pct = float(payload.wastage_percent or 0.0)
+    overhead_u = float(payload.overhead_cost_per_unit or 0.0)
+    wastage_multiplier = 1.0 / (1.0 - (wastage_pct / 100.0)) if wastage_pct < 99 else 1.0
+    adjusted_material_cost = raw_material_cost * wastage_multiplier
+    new_cogs = round(adjusted_material_cost + overhead_u, 2)
+
+    product.cogs = new_cogs
+    product.overhead_cost_per_unit = overhead_u
+    product.wastage_percent = wastage_pct
+
+    await db.commit()
+    await db.refresh(product)
+
+    # 4. Hitung Rekomendasi Harga AI
+    ai_pricing = ai_service.calculate_dynamic_pricing_recommendation(
+        materials=materials_for_ai,
+        current_selling_price=float(product.price),
+        overhead_cost_per_unit=overhead_u,
+        wastage_percent=wastage_pct,
+        category=product.category,
+        product_name=product.name,
+        target_margin_percent=float(payload.target_margin_percent or 35.0)
+    )
+
+    return {
+        "success": True,
+        "message": f"Resep produk '{product.name}' berhasil disimpan. HPP riil baru: Rp {new_cogs:,.0f}/pcs",
+        "product_id": product.id,
+        "new_cogs": new_cogs,
+        "ai_pricing_analysis": ai_pricing
+    }
+
+
+@router.get("/products/{product_id}/pricing-analysis", summary="Analisis HPP & Rekomendasi Harga AI Anti-Rugi")
+async def get_pricing_analysis(
+    product_id: str,
+    target_margin: float = Query(default=35.0, ge=10.0, le=80.0, description="Target margin keuntungan kotor (%)"),
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Evaluasi mendalam HPP dan relevansi harga jual produk saat ini.
+    Mendeteksi apakah harga saat ini rugi, margin tipis, atau sehat.
+    """
+    prod_stmt = select(Product).where(
+        Product.id == product_id,
+        Product.tenant_id == current_user.tenant_id
+    )
+    prod_res = await db.execute(prod_stmt)
+    product = prod_res.scalar_one_or_none()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Produk dengan ID '{product_id}' tidak ditemukan."
+        )
+
+    # Ambil bahan resep jika ada
+    stmt = select(ProductRecipeItem).where(
+        ProductRecipeItem.product_id == product_id,
+        ProductRecipeItem.tenant_id == current_user.tenant_id
+    )
+    res = await db.execute(stmt)
+    recipe_items = res.scalars().all()
+
+    materials_for_ai = []
+    if recipe_items:
+        for item in recipe_items:
+            materials_for_ai.append({
+                "material_name": item.material_name,
+                "quantity_required": float(item.quantity_required),
+                "unit": item.unit,
+                "cost_per_unit": float(item.cost_per_unit)
+            })
+    else:
+        # Jika belum ada BOM terperinci, gunakan cogs produk saat ini sebagai 1 komponen dasar
+        materials_for_ai.append({
+            "material_name": "Biaya Modal Produk / Pembelian Dasar",
+            "quantity_required": 1.0,
+            "unit": product.unit or "Pcs",
+            "cost_per_unit": float(product.cogs or 0.0)
+        })
+
+    analysis = ai_service.calculate_dynamic_pricing_recommendation(
+        materials=materials_for_ai,
+        current_selling_price=float(product.price),
+        overhead_cost_per_unit=float(product.overhead_cost_per_unit or 0.0),
+        wastage_percent=float(product.wastage_percent or 0.0),
+        category=product.category,
+        product_name=product.name,
+        target_margin_percent=target_margin
+    )
+    analysis["product_id"] = product.id
+    analysis["sku"] = product.sku
+    analysis["stock"] = product.stock
+    analysis["unit"] = product.unit
+
+    return analysis
+
+
+@router.put("/products/{product_id}/apply-recommended-price", summary="Terapkan harga rekomendasi AI ke katalog POS")
+async def apply_recommended_price(
+    product_id: str,
+    payload: ApplyPricePayload,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    1-Klik untuk mengadopsi harga jual rekomendasi AI langsung ke katalog POS kasir.
+    Menjamin kasir langsung menjual dengan harga yang terbukti tidak rugi.
+    """
+    stmt = select(Product).where(
+        Product.id == product_id,
+        Product.tenant_id == current_user.tenant_id
+    )
+    res = await db.execute(stmt)
+    product = res.scalar_one_or_none()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Produk dengan ID '{product_id}' tidak ditemukan."
+        )
+
+    old_price = float(product.price)
+    product.price = round(payload.new_price, 2)
+    await db.commit()
+    await db.refresh(product)
+
+    return {
+        "success": True,
+        "message": f"Harga produk '{product.name}' berhasil diperbarui dari Rp {old_price:,.0f} menjadi Rp {product.price:,.0f}",
+        "product_id": product.id,
+        "old_price": old_price,
+        "new_price": float(product.price)
+    }
+
+
+@router.post("/inventory/restock", summary="Restock bahan baku/produk (Recycle Stock) dengan Moving Weighted Average Cost")
+async def restock_inventory(
+    payload: RestockInventoryPayload,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Siklus Restock (Recycle Stock) Bahan Baku / Barang Dagangan.
+    Delegasi ke InventoryService sesuai Hexagonal Architecture.
+    """
+    return await inventory_service.restock_inventory_and_evaluate_bom(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        payload=payload
+    )
+
+
+@router.post("/production/batch", summary="Catat produksi batch produk (Konversi Bahan Baku -> Produk Jadi)")
+async def record_production_batch(
+    payload: ProductionBatchPayload,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Siklus Batch Produksi UMKM:
+    Delegasi ke InventoryService sesuai Hexagonal Architecture.
+    """
+    try:
+        return await inventory_service.execute_production_batch(
+            db=db,
+            tenant_id=current_user.tenant_id,
+            payload=payload
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
+@router.get("/pricing/margin-leakage-alerts", summary="Pindai seluruh katalog untuk mendeteksi produk yang berpotensi rugi")
+async def scan_margin_leakage_alerts(
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Pindai otomatis seluruh katalog produk untuk mendeteksi 'Margin Leakage'.
+    Delegasi ke InventoryService sesuai Hexagonal Architecture.
+    """
+    return await inventory_service.scan_margin_leakage(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        tax_rate=PP55_FINAL_TAX_RATE
+    )
+
+
 

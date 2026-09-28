@@ -93,6 +93,7 @@ class TenantSummarySchema(BaseModel):
     active_license: str
     address: Optional[str] = None
     npwp: Optional[str] = None
+    is_setup_complete: bool = False
 
 
 class UserProfileSchema(BaseModel):
@@ -328,7 +329,8 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         branch_code=user.tenant.branch_code,
         active_license=user.tenant.active_license,
         address=user.tenant.address,
-        npwp=user.tenant.npwp
+        npwp=user.tenant.npwp,
+        is_setup_complete=bool(getattr(user.tenant, "is_setup_complete", False))
     )
 
     return LoginResponse(
@@ -438,7 +440,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         branch_code=new_tenant.branch_code,
         active_license=new_tenant.active_license,
         address=new_tenant.address,
-        npwp=new_tenant.npwp
+        npwp=new_tenant.npwp,
+        is_setup_complete=bool(getattr(new_tenant, "is_setup_complete", False))
     )
 
     return LoginResponse(
@@ -480,7 +483,8 @@ async def get_my_profile(current_user: UserCredential = Depends(get_current_user
         branch_code=current_user.tenant.branch_code,
         active_license=current_user.tenant.active_license,
         address=current_user.tenant.address,
-        npwp=current_user.tenant.npwp
+        npwp=current_user.tenant.npwp,
+        is_setup_complete=bool(getattr(current_user.tenant, "is_setup_complete", False))
     )
 
     return LoginResponse(

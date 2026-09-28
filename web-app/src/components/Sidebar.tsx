@@ -14,7 +14,8 @@ import {
   CircleDot,
   Clock,
   Coins,
-  Star
+  Star,
+  Rocket
 } from 'lucide-react';
 import type { NavigationTab, Tenant, UserRole } from '../types';
 
@@ -110,6 +111,12 @@ const FAVORITE_ITEMS: readonly NavSubItem[] = [
 
 const OTHER_ITEMS: readonly NavSubItem[] = [
   {
+    id: 'initial_setup',
+    label: 'Setup Modal & Saldo Awal',
+    icon: Rocket,
+    allowedRoles: new Set(['OWNER'])
+  },
+  {
     id: 'voice_dialect',
     label: 'Dialek Suara AI',
     icon: Mic2,
@@ -203,6 +210,46 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
             }}
           />
         </div>
+        
+        {/* Onboarding Banner untuk Owner jika Saldo Awal Belum Diatur */}
+        {userRole === 'OWNER' && !tenant?.isSetupComplete && (
+          <div 
+            onClick={() => onSelectTab('initial_setup')}
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(168,85,247,0.14) 100%)',
+              border: '1px solid rgba(129,140,248,0.4)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 2px 10px rgba(99,102,241,0.15)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: 'rgba(99,102,241,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Rocket size={15} color="#A5B4FC" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#E0E7FF' }}>
+                Setup Saldo Awal
+              </span>
+              <span style={{ fontSize: '0.66rem', color: '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                Input kas, stok & aset awal ➔
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* 2-Column Squircle Navigation Grid Tiles (6 Modul Utama) */}
         <div className="homies-nav-grid">
