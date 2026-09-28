@@ -42,7 +42,7 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
 
   // --- Keranjang & Kasir State ---
   const [cart, setCart] = useState<POSCartItem[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'STATIC_QRIS' | 'QRIS'>('CASH');
   const [cashTendered, setCashTendered] = useState<number>(0);
   const [customerName, setCustomerName] = useState<string>("Pelanggan Umum");
   const [customerPhone, setCustomerPhone] = useState<string>("");

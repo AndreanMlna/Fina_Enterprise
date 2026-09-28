@@ -11,6 +11,7 @@ import type {
   CreateSupplierQuotePayload, 
   CreateInvoicePayload, 
   PayInvoiceResponse, 
+  VerifyTransferProofResponse,
   LoanEvaluationRecord, 
   CreateLoanEvaluationPayload, 
   ReceiptForensicsRecordItem, 
@@ -47,6 +48,12 @@ export class OperationsService {
 
   async payInvoice(invoiceId: string, paymentMethod: string = 'CASH'): Promise<PayInvoiceResponse> {
     return httpClient.patch<PayInvoiceResponse>(`/api/v1/invoices/${invoiceId}/pay`, { payment_method: paymentMethod });
+  }
+
+  async verifyTransferProof(invoiceId: string, file: File): Promise<VerifyTransferProofResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return httpClient.postFormData<VerifyTransferProofResponse>(`/api/v1/invoices/${invoiceId}/verify-transfer-proof`, formData);
   }
 
   async sendDunningReminder(invoiceId: string, tone?: string, customMessage?: string): Promise<{ success: boolean; message: string }> {

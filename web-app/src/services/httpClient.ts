@@ -136,6 +136,28 @@ export class HttpClient {
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  async postFormData<T>(endpoint: string, formData: FormData): Promise<T> {
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`;
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const message = errData.detail || `Permintaan HTTP gagal (${response.status}: ${response.statusText})`;
+      throw new Error(message);
+    }
+    return await response.json();
+  }
 }
 
 export const httpClient = new HttpClient();

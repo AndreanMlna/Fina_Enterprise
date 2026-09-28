@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShoppingCart,
   RotateCcw,
@@ -9,6 +9,10 @@ import {
   Trash2,
   Banknote,
   QrCode,
+  Building2,
+  Copy,
+  Check,
+  Mic,
   AlertTriangle,
   Receipt,
   ArrowRight
@@ -28,8 +32,8 @@ interface POSCartPanelProps {
   subtotal: number;
   taxPP55Estimated: number;
   grandTotal: number;
-  paymentMethod: 'CASH' | 'QRIS';
-  onPaymentMethodChange: (method: 'CASH' | 'QRIS') => void;
+  paymentMethod: 'CASH' | 'STATIC_QRIS' | 'QRIS';
+  onPaymentMethodChange: (method: 'CASH' | 'STATIC_QRIS' | 'QRIS') => void;
   cashTendered: number;
   onCashTenderedChange: (val: number) => void;
   changeAmount: number;
@@ -61,6 +65,14 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
   errorMessage,
   onCheckout
 }) => {
+  const [copiedBank, setCopiedBank] = useState<string | null>(null);
+
+  const handleCopyAccount = (accNumber: string, label: string) => {
+    navigator.clipboard.writeText(accNumber);
+    setCopiedBank(label);
+    setTimeout(() => setCopiedBank(null), 2500);
+  };
+
   return (
     <div
       className="glass-panel"
@@ -154,8 +166,8 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
 
       {/* Daftar Item Keranjang */}
       <div style={{
-        minHeight: '140px',
-        maxHeight: '260px',
+        minHeight: '130px',
+        maxHeight: '230px',
         overflowY: 'auto',
         borderTop: '1px solid var(--border-subtle)',
         borderBottom: '1px solid var(--border-subtle)',
@@ -165,7 +177,7 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
         gap: '8px'
       }}>
         {cart.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: '0.8rem' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 0', fontSize: '0.8rem' }}>
             Keranjang masih kosong. Klik "+ Tambah" pada katalog untuk menambahkan produk.
           </div>
         ) : (
@@ -264,62 +276,107 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
         </div>
       </div>
 
-      {/* Metode Pembayaran */}
+      {/* Metode Pembayaran (3 Opsi Saldo & Gateway) */}
       <div>
-        <label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#ffffff', display: 'block', marginBottom: '8px' }}>
-          Metode Pembayaran
+        <label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span>Opsi Pembayaran Saldo & Kasir:</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--mint-neon)' }}>0% Fee / Bebas Potongan</span>
         </label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+          {/* Opsi 1: Tunai Cash */}
           <button
             type="button"
             onClick={() => onPaymentMethodChange('CASH')}
             style={{
-              padding: '10px',
+              padding: '8px 6px',
               borderRadius: '8px',
               border: paymentMethod === 'CASH' ? '2px solid var(--emerald-500)' : '1px solid var(--border-subtle)',
-              background: paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+              background: paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(15, 23, 42, 0.6)',
               color: paymentMethod === 'CASH' ? 'var(--emerald-400)' : 'var(--text-muted)',
-              fontWeight: 700,
-              fontSize: '0.84rem',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              cursor: 'pointer'
+              gap: '4px',
+              cursor: 'pointer',
+              textAlign: 'center'
             }}
           >
-            <Banknote size={18} />
-            <span>Tunai (Cash)</span>
+            <Banknote size={17} />
+            <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>Opsi 1: CASH</span>
+            <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>100% Offline (0%)</span>
           </button>
 
+          {/* Opsi 2: QRIS Statis / Rekening Toko */}
+          <button
+            type="button"
+            onClick={() => onPaymentMethodChange('STATIC_QRIS')}
+            style={{
+              padding: '8px 6px',
+              borderRadius: '8px',
+              border: paymentMethod === 'STATIC_QRIS' ? '2px solid var(--mint-neon)' : '1px solid var(--border-subtle)',
+              background: paymentMethod === 'STATIC_QRIS' ? 'rgba(0, 223, 143, 0.18)' : 'rgba(15, 23, 42, 0.6)',
+              color: paymentMethod === 'STATIC_QRIS' ? 'var(--mint-neon)' : 'var(--text-muted)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer',
+              textAlign: 'center'
+            }}
+          >
+            <QrCode size={17} />
+            <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>Opsi 2: QRIS MEJA</span>
+            <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>Stiker & Rek. Toko</span>
+          </button>
+
+          {/* Opsi Gateway SNAP QRIS */}
           <button
             type="button"
             onClick={() => onPaymentMethodChange('QRIS')}
             style={{
-              padding: '10px',
+              padding: '8px 6px',
               borderRadius: '8px',
               border: paymentMethod === 'QRIS' ? '2px solid var(--cyan-500)' : '1px solid var(--border-subtle)',
-              background: paymentMethod === 'QRIS' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+              background: paymentMethod === 'QRIS' ? 'rgba(6, 182, 212, 0.18)' : 'rgba(15, 23, 42, 0.6)',
               color: paymentMethod === 'QRIS' ? 'var(--cyan-400)' : 'var(--text-muted)',
-              fontWeight: 700,
-              fontSize: '0.84rem',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              cursor: 'pointer'
+              gap: '4px',
+              cursor: 'pointer',
+              textAlign: 'center'
             }}
           >
-            <QrCode size={18} />
-            <span>QRIS SNAP</span>
+            <Building2 size={17} />
+            <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>SNAP QRIS</span>
+            <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>Dinamis Gateway</span>
           </button>
         </div>
       </div>
 
-      {/* Input Tunai & Kembalian */}
+      {/* --- OPSI 1: INPUT TUNAI & KEMBALIAN (AKUN 1101) --- */}
       {paymentMethod === 'CASH' && (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.05)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          borderRadius: '8px',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+            <span style={{ color: 'var(--emerald-400)', fontWeight: 700 }}>
+              Jurnal SAK EMKM:
+            </span>
+            <span className="mono" style={{ color: '#94a3b8' }}>
+              DEBET: 1101 (Kas Tunai) | KREDIT: 4101
+            </span>
+          </div>
+
+          {/* Pilihan Cepat Uang Kertas Pecahan */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
             {[10000, 20000, 50000, 100000].map((nominal) => (
               <button
                 key={nominal}
@@ -331,7 +388,7 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
                   border: 'none',
                   borderRadius: '4px',
                   padding: '6px 2px',
-                  fontSize: '0.72rem',
+                  fontSize: '0.70rem',
                   fontWeight: 600,
                   cursor: 'pointer'
                 }}
@@ -339,12 +396,29 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
                 Rp {(nominal / 1000)}k
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => onCashTenderedChange(grandTotal)}
+              style={{
+                background: cashTendered === grandTotal && grandTotal > 0 ? 'var(--mint-neon)' : 'rgba(30, 41, 59, 0.7)',
+                color: cashTendered === grandTotal && grandTotal > 0 ? '#000000' : '#ffffff',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '6px 2px',
+                fontSize: '0.70rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              title="Bayar dengan uang pas"
+            >
+              Uang Pas
+            </button>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
-                Diterima (Rp):
+                Uang Diterima Kasir (Rp):
               </label>
               <input
                 type="number"
@@ -366,10 +440,10 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
 
             <div style={{ flex: 1, textAlign: 'right' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>
-                Kembalian:
+                Kembalian Kasir:
               </span>
               <div style={{
-                fontSize: '1rem',
+                fontSize: '1.05rem',
                 fontWeight: 800,
                 color: isCashInsufficient ? 'var(--rose-400)' : 'var(--emerald-400)'
               }}>
@@ -380,7 +454,106 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
         </div>
       )}
 
-      {/* QRIS Otomatis Information */}
+      {/* --- OPSI 2: QRIS STATIS MEJA & REKENING TOKO BIASA (AKUN 1102) --- */}
+      {paymentMethod === 'STATIC_QRIS' && (
+        <div style={{
+          background: 'rgba(0, 223, 143, 0.05)',
+          border: '1px solid rgba(0, 223, 143, 0.3)',
+          borderRadius: '8px',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+            <span style={{ color: 'var(--mint-neon)', fontWeight: 700 }}>
+              Jurnal SAK EMKM:
+            </span>
+            <span className="mono" style={{ color: '#94a3b8' }}>
+              DEBET: 1102 (Bank Giro/QRIS) | KREDIT: 4101
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '10px', alignItems: 'center' }}>
+            {/* Visual Stiker QRIS Statis Meja Toko */}
+            <div style={{
+              background: '#ffffff',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+            }}>
+              <QrCode size={56} color="#0f172a" />
+              <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#dc2626', marginTop: '2px' }}>
+                QRIS MEJA #1
+              </span>
+            </div>
+
+            {/* Nomor Rekening Toko Langsung */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.74rem' }}>
+              <span style={{ fontWeight: 700, color: '#ffffff' }}>
+                Rekening Toko Langsung (0% Fee):
+              </span>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.7)', padding: '3px 6px', borderRadius: '4px' }}>
+                <span><strong>BCA</strong>: 8830-1928-31 (FINA Store)</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyAccount('8830192831', 'BCA')}
+                  style={{ background: 'none', border: 'none', color: copiedBank === 'BCA' ? 'var(--mint-neon)' : '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                  title="Salin No Rekening"
+                >
+                  {copiedBank === 'BCA' ? <Check size={12} /> : <Copy size={12} />}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.7)', padding: '3px 6px', borderRadius: '4px' }}>
+                <span><strong>Mandiri</strong>: 137-00-19283-91</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyAccount('137001928391', 'Mandiri')}
+                  style={{ background: 'none', border: 'none', color: copiedBank === 'Mandiri' ? 'var(--mint-neon)' : '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                  title="Salin No Rekening"
+                >
+                  {copiedBank === 'Mandiri' ? <Check size={12} /> : <Copy size={12} />}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.7)', padding: '3px 6px', borderRadius: '4px' }}>
+                <span><strong>GoPay/DANA</strong>: 0812-9876-5432</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyAccount('081298765432', 'GoPay')}
+                  style={{ background: 'none', border: 'none', color: copiedBank === 'GoPay' ? 'var(--mint-neon)' : '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                >
+                  {copiedBank === 'GoPay' ? <Check size={12} /> : <Copy size={12} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'rgba(0, 223, 143, 0.1)',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            fontSize: '0.68rem',
+            color: 'var(--mint-neon)'
+          }}>
+            <Mic size={13} style={{ flexShrink: 0 }} />
+            <span>
+              Voice AI: Ucapkan <em>"Pelanggan bayar {formatCurrency(grandTotal)} transfer BCA"</em> untuk auto-input!
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* --- OPSI GATEWAY: QRIS DINAMIS BANK INDONESIA --- */}
       {paymentMethod === 'QRIS' && (
         <div style={{
           background: 'rgba(6, 182, 212, 0.05)',
@@ -391,7 +564,7 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
         }}>
           <QrCode size={32} color="var(--cyan-400)" style={{ margin: '0 auto 6px auto' }} />
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff' }}>
-            QRIS Dinamis Bank Indonesia
+            QRIS Dinamis SNAP Gateway
           </div>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
             Mendukung GoPay, OVO, Dana, ShopeePay & Semua M-Banking
@@ -407,7 +580,6 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
           color: 'var(--rose-400)',
           padding: '8px 12px',
           borderRadius: '6px',
-          fontSize: '0.78rem',
           display: 'flex',
           alignItems: 'center',
           gap: '6px'

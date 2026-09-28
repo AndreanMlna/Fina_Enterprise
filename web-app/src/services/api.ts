@@ -71,6 +71,7 @@ class ApiService {
   getInvoices = operationsService.getInvoices.bind(operationsService);
   createInvoice = operationsService.createInvoice.bind(operationsService);
   payInvoice = operationsService.payInvoice.bind(operationsService);
+  verifyTransferProof = operationsService.verifyTransferProof.bind(operationsService);
   sendDunningReminder = operationsService.sendDunningReminder.bind(operationsService);
 
   // --- Domain: Anti-Predatory Loan Deobfuscator ---

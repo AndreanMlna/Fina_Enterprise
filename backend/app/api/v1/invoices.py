@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import uuid
 import hashlib
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status, File, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -74,6 +74,23 @@ class PayInvoicePayload(BaseModel):
 class DunningReminderPayload(BaseModel):
     tone: Optional[str] = "REMINDER"
     custom_message: Optional[str] = None
+
+
+class VerifyTransferProofResponse(BaseModel):
+    success: bool
+    is_authentic: bool
+    message: str
+    ela_integrity_score: int
+    bank_detected: str
+    sender_name: str
+    amount_verified: float
+    reference_number: str
+    invoice_id: str
+    invoice_number: str
+    invoice_status: str
+    journal_entry_number: Optional[str] = None
+    audit_merkle_hash: Optional[str] = None
+    tamper_details: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -372,3 +389,113 @@ async def send_dunning_reminder(
         "tone": chosen_tone,
         "sent_message": final_message
     }
+
+
+@router.post(
+    "/{invoice_id}/verify-transfer-proof",
+    response_model=VerifyTransferProofResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Opsi 3: Verifikasi Bukti Transfer m-Banking dengan AI Vision & ELA (Anti-Struk Palsu)"
+)
+async def verify_transfer_proof(
+    invoice_id: str,
+    file: UploadFile = File(...),
+    current_user: UserCredential = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Opsi 3: Verifikasi Bukti Transfer m-Banking Menggunakan AI Vision (Anti-Struk Palsu)
+    1. Kasir/Owner mengunggah screenshot bukti transfer (BCA Mobile, Livin' Mandiri, BRImo, dll).
+    2. Model AI Vision & ELA Matrix memeriksa keaslian bukti transfer (mendeteksi apakah nominal editan Photoshop/Canva atau asli).
+    3. Begitu terverifikasi asli dan nominal sesuai:
+       - Status invoice otomatis ditandai LUNAS (PAID) di tabel 'invoices'.
+       - Auto-posting jurnal berpasangan SAK EMKM:
+         * DEBET: Akun 1102 (Bank Giro / QRIS)
+         * KREDIT: Akun 1103 (Piutang Usaha)
+       - Saldo kas/bank perusahaan bertambah, saldo piutang berkurang.
+       - Diterbitkan audit hash SHA-256 Merkle Chaining di 'journal_entries'.
+    4. Jika terdeteksi manipulasi/palsu:
+       - Transaksi pelunasan ditolak seketika demi keamanan kas UMKM.
+    """
+    stmt = select(Invoice).where(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == current_user.tenant_id
+    )
+    res = await db.execute(stmt)
+    inv = res.scalar_one_or_none()
+
+    if not inv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice tidak ditemukan atau bukan milik unit usaha Anda."
+        )
+
+    if inv.status == InvoiceStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invoice ini telah lunas sebelumnya."
+        )
+
+    # Baca file citra bukti transfer
+    image_bytes = await file.read()
+    expected_amount = float(inv.amount)
+
+    # Jalankan verifikasi multimodal (Computer Vision ELA Matrix + Gemini Vision)
+    verification = ai_service.verify_bank_transfer_proof(
+        image_bytes=image_bytes,
+        expected_amount=expected_amount,
+        expected_invoice_number=inv.invoice_number
+    )
+
+    if not verification["is_authentic"] or verification["is_tampered"]:
+        return VerifyTransferProofResponse(
+            success=False,
+            is_authentic=False,
+            message="Peringatan: Bukti transfer ditolak! Terdeteksi anomali piksel atau nominal tidak cocok dengan tagihan.",
+            ela_integrity_score=verification["ela_score"],
+            bank_detected=verification["bank_name"],
+            sender_name=verification["sender_name"],
+            amount_verified=verification["transfer_amount"],
+            reference_number=verification["reference_number"],
+            invoice_id=inv.id,
+            invoice_number=inv.invoice_number,
+            invoice_status=inv.status.value,
+            tamper_details=verification["details"]
+        )
+
+    # Jika lolos uji forensik dan asli: Bukukan langsung ke buku besar SAK EMKM (ACID)
+    journal_entry = await AccountingService.post_double_entry(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        description=f"Pelunasan Transfer m-Banking ({verification['bank_name']}) Invoice {inv.invoice_number} - {inv.customer_name}",
+        debit_account_code=COA_BANK_GIRO_QRIS,
+        credit_account_code=COA_ACCOUNTS_RECEIVABLE,
+        amount=expected_amount,
+        memo_debit=f"Penerimaan Transfer Bank Rekening {verification['bank_name']} Ref {verification['reference_number']}",
+        memo_credit=f"Pelunasan Piutang Usaha Invoice {inv.invoice_number}",
+        entry_number_prefix="JV-AR-TRF",
+        update_account_balances=True
+    )
+
+    # Tandai Invoice sebagai LUNAS
+    inv.status = InvoiceStatus.PAID
+    inv.days_overdue = 0
+    await db.commit()
+
+    return VerifyTransferProofResponse(
+        success=True,
+        is_authentic=True,
+        message=f"Bukti transfer {verification['bank_name']} terverifikasi ASLI! Invoice {inv.invoice_number} resmi LUNAS dan dibukukan ke SAK EMKM.",
+        ela_integrity_score=verification["ela_score"],
+        bank_detected=verification["bank_name"],
+        sender_name=verification["sender_name"],
+        amount_verified=verification["transfer_amount"],
+        reference_number=verification["reference_number"],
+        invoice_id=inv.id,
+        invoice_number=inv.invoice_number,
+        invoice_status="PAID",
+        journal_entry_number=journal_entry.entry_number,
+        audit_merkle_hash=journal_entry.audit_merkle_hash,
+        tamper_details=None
+    )
+

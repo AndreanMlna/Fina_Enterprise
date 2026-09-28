@@ -270,7 +270,7 @@ export interface POSCheckoutPayload {
     cogs: number;
     discount_percent: number;
   }[];
-  payment_method: 'CASH' | 'QRIS' | 'TRANSFER';
+  payment_method: 'CASH' | 'STATIC_QRIS' | 'BANK_TRANSFER' | 'QRIS' | 'TRANSFER';
   cash_tendered?: number;
   customer_name?: string;
   customer_phone?: string;
@@ -325,6 +325,23 @@ export interface PayInvoiceResponse {
   journal_entry_number: string;
   audit_merkle_hash: string;
   amount_settled: number;
+}
+
+export interface VerifyTransferProofResponse {
+  success: boolean;
+  is_authentic: boolean;
+  message: string;
+  ela_integrity_score: number;
+  bank_detected: string;
+  sender_name: string;
+  amount_verified: number;
+  reference_number: string;
+  invoice_id: string;
+  invoice_number: string;
+  invoice_status: string;
+  journal_entry_number?: string;
+  audit_merkle_hash?: string;
+  tamper_details?: string;
 }
 
 export interface LoanEvaluationRecord {

@@ -7,10 +7,14 @@ import {
   Loader2,
   PlusCircle,
   CreditCard,
+  Scan,
+  Upload,
+  ShieldAlert,
+  CheckCircle2,
   X
 } from 'lucide-react';
 import { api } from '../../services/api';
-import type { ARDunningInvoice, CreateInvoicePayload } from '../../types';
+import type { ARDunningInvoice, CreateInvoicePayload, VerifyTransferProofResponse } from '../../types';
 import { formatCurrency, maskPhone, maskCustomerName } from '../../utils';
 
 const getDefaultDueDate = (): string => {
@@ -44,6 +48,59 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
   // State Pelunasan Invoice
   const [isPaying, setIsPaying] = useState(false);
   const [settlementSuccess, setSettlementSuccess] = useState<string | null>(null);
+
+  // State Verifikasi Bukti Transfer m-Banking AI (Opsi 3)
+  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+  const [verifyTargetInvoice, setVerifyTargetInvoice] = useState<ARDunningInvoice | null>(null);
+  const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [isVerifyingProof, setIsVerifyingProof] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<VerifyTransferProofResponse | null>(null);
+
+  const handleOpenVerifyModal = (inv: ARDunningInvoice) => {
+    setVerifyTargetInvoice(inv);
+    setSelectedProofFile(null);
+    setProofPreviewUrl(null);
+    setVerificationResult(null);
+    setIsVerifyModalOpen(true);
+  };
+
+  const handleProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedProofFile(file);
+      setProofPreviewUrl(URL.createObjectURL(file));
+      setVerificationResult(null);
+    }
+  };
+
+  const handleExecuteProofVerification = async () => {
+    const target = verifyTargetInvoice || selectedInvoice;
+    if (!target) {
+      alert('Pilih invoice yang akan diverifikasi.');
+      return;
+    }
+    if (!selectedProofFile) {
+      alert('Unggah file screenshot bukti transfer m-Banking terlebih dahulu.');
+      return;
+    }
+
+    setIsVerifyingProof(true);
+    setVerificationResult(null);
+    try {
+      const res = await api.verifyTransferProof(target.id, selectedProofFile);
+      setVerificationResult(res);
+      if (res.is_authentic && res.success) {
+        setSettlementSuccess(`✓ ${res.message} [Voucher: ${res.journal_entry_number}]`);
+        setTimeout(() => setSettlementSuccess(null), 8000);
+        await fetchInvoices();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Gagal memverifikasi bukti transfer.');
+    } finally {
+      setIsVerifyingProof(false);
+    }
+  };
 
   const fetchInvoices = async () => {
     setIsLoading(true);
@@ -267,6 +324,7 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Nominal</th>
                     <th style={{ padding: '10px 12px', textAlign: 'center' }}>Status</th>
                     <th style={{ padding: '10px 12px', textAlign: 'center' }}>Rekomendasi</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Aksi Verifikasi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -314,6 +372,36 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
                             {inv.suggestedTone}
                           </span>
                         </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          {!isPaid ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenVerifyModal(inv);
+                              }}
+                              className="btn btn-sm btn-primary"
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '4px 8px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
+                                color: '#000000',
+                                fontWeight: 700
+                              }}
+                              title="Unggah dan verifikasi bukti transfer m-Banking dengan AI Vision"
+                            >
+                              <Scan size={12} />
+                              <span>Cek Bukti</span>
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.70rem', color: 'var(--emerald-400)', fontWeight: 600 }}>
+                              ✓ Selesai
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -332,16 +420,37 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
 
             {/* Tombol Pelunasan Cepat jika belum lunas */}
             {selectedInvoice && selectedInvoice.status !== 'PAID' && (
-              <button 
-                className="btn btn-sm btn-outline"
-                onClick={handlePayInvoice}
-                disabled={isPaying}
-                title="Tandai invoice lunas dan bukukan otomatis ke SAK EMKM"
-                style={{ borderColor: 'var(--emerald-500)', color: 'var(--emerald-400)' }}
-              >
-                <CreditCard size={13} />
-                <span>{isPaying ? 'Memproses...' : 'Tandai Lunas SAK EMKM'}</span>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button 
+                  className="btn btn-sm btn-primary"
+                  onClick={() => handleOpenVerifyModal(selectedInvoice)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
+                    color: '#000000',
+                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    padding: '6px 10px'
+                  }}
+                  title="Opsi 3: Verifikasi bukti transfer m-Banking menggunakan AI Vision & ELA"
+                >
+                  <Scan size={13} />
+                  <span>Verifikasi Transfer AI</span>
+                </button>
+
+                <button 
+                  className="btn btn-sm btn-outline"
+                  onClick={handlePayInvoice}
+                  disabled={isPaying}
+                  title="Tandai invoice lunas manual dan bukukan otomatis ke SAK EMKM"
+                  style={{ borderColor: 'var(--emerald-500)', color: 'var(--emerald-400)', fontSize: '0.72rem', padding: '6px 8px' }}
+                >
+                  <CreditCard size={13} />
+                  <span>{isPaying ? '...' : 'Bayar Tunai'}</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -587,6 +696,248 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Verifikasi Bukti Transfer m-Banking Menggunakan AI Vision (Anti-Struk Palsu) */}
+      {isVerifyModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1050,
+          padding: '16px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-medium)',
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Scan size={20} color="var(--mint-neon)" />
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0 }}>
+                    Verifikasi Bukti Transfer AI (Anti-Struk Palsu)
+                  </h3>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                    Opsi 3: Forensik Piksel ELA + Gemini Vision Mutasi Bank
+                  </span>
+                </div>
+              </div>
+              <button 
+                className="btn btn-sm btn-secondary"
+                onClick={() => setIsVerifyModalOpen(false)}
+                style={{ padding: '4px' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Target Invoice Card */}
+            {verifyTargetInvoice && (
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.8)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '8px',
+                fontSize: '0.78rem'
+              }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>No Invoice:</span>
+                  <strong style={{ color: '#ffffff' }}>{verifyTargetInvoice.invoiceNumber}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Pelanggan:</span>
+                  <strong style={{ color: '#ffffff' }}>{maskCustomer(verifyTargetInvoice.customerName)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Total Tagihan:</span>
+                  <strong className="mono" style={{ color: 'var(--emerald-400)', fontSize: '0.92rem' }}>
+                    {formatCurrency(verifyTargetInvoice.amount)}
+                  </strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Akun Tujuan SAK EMKM:</span>
+                  <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>1102 (Bank Giro/QRIS)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Upload Area */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
+                Unggah Screenshot Bukti Transfer m-Banking (BCA / Mandiri / BRI / E-Wallet):
+              </label>
+              
+              <div style={{
+                border: '2px dashed var(--border-medium)',
+                borderRadius: '8px',
+                padding: '20px',
+                textAlign: 'center',
+                background: 'rgba(255, 255, 255, 0.02)',
+                cursor: 'pointer',
+                position: 'relative'
+              }}>
+                <input 
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleProofFileChange}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    opacity: 0,
+                    cursor: 'pointer',
+                    width: '100%',
+                    height: '100%'
+                  }}
+                />
+                {proofPreviewUrl ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <img 
+                      src={proofPreviewUrl} 
+                      alt="Preview Bukti Transfer" 
+                      style={{ maxHeight: '180px', borderRadius: '6px', objectFit: 'contain', border: '1px solid rgba(255,255,255,0.1)' }} 
+                    />
+                    <span style={{ fontSize: '0.74rem', color: 'var(--mint-neon)' }}>
+                      {selectedProofFile?.name} (Klik untuk ganti file)
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                    <Upload size={32} color="var(--mint-neon)" />
+                    <span style={{ fontSize: '0.82rem', color: '#ffffff', fontWeight: 600 }}>
+                      Pilih atau Seret Gambar Bukti Transfer ke Sini
+                    </span>
+                    <span style={{ fontSize: '0.70rem' }}>
+                      Mendukung JPEG, PNG, WebP (Tangkapan Layar HP Asli)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tombol Eksekusi AI Scan */}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!selectedProofFile || isVerifyingProof}
+              onClick={handleExecuteProofVerification}
+              style={{
+                padding: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
+                color: '#000000',
+                fontWeight: 800,
+                fontSize: '0.88rem'
+              }}
+            >
+              {isVerifyingProof ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>AI ELA Matrix & Gemini Vision Sedang Memindai...</span>
+                </>
+              ) : (
+                <>
+                  <Scan size={16} />
+                  <span>Jalankan Verifikasi Keaslian & Selesaikan Invoice</span>
+                </>
+              )}
+            </button>
+
+            {/* Hasil Analisis Forensik AI */}
+            {verificationResult && (
+              <div style={{
+                background: verificationResult.is_authentic 
+                  ? 'rgba(16, 185, 129, 0.1)' 
+                  : 'rgba(239, 68, 68, 0.12)',
+                border: `1px solid ${verificationResult.is_authentic ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.4)'}`,
+                borderRadius: '8px',
+                padding: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {verificationResult.is_authentic ? (
+                      <CheckCircle2 size={18} color="var(--emerald-400)" />
+                    ) : (
+                      <ShieldAlert size={18} color="var(--rose-400)" />
+                    )}
+                    <strong style={{ fontSize: '0.88rem', color: verificationResult.is_authentic ? 'var(--emerald-400)' : 'var(--rose-400)' }}>
+                      {verificationResult.is_authentic ? 'BUKTI TRANSFER TERVERIFIKASI SAH' : 'PERINGATAN: STRUK PALSU / MANIPULASI DITOLAK'}
+                    </strong>
+                  </div>
+                  <span className={`badge ${verificationResult.is_authentic ? 'badge-emerald' : 'badge-rose'}`}>
+                    ELA: {verificationResult.ela_integrity_score} / 100
+                  </span>
+                </div>
+
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.4 }}>
+                  {verificationResult.message}
+                </p>
+
+                {verificationResult.tamper_details && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--rose-400)', background: 'rgba(0,0,0,0.3)', padding: '6px 8px', borderRadius: '4px' }}>
+                    Detail Anomali: {verificationResult.tamper_details}
+                  </div>
+                )}
+
+                {/* Rincian Entitas Terdeteksi */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', fontSize: '0.74rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Bank Terdeteksi: </span>
+                    <strong style={{ color: '#ffffff' }}>{verificationResult.bank_detected}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Pengirim: </span>
+                    <strong style={{ color: '#ffffff' }}>{verificationResult.sender_name}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Nominal Valid: </span>
+                    <strong className="mono" style={{ color: 'var(--emerald-400)' }}>{formatCurrency(verificationResult.amount_verified)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Ref Transaksi: </span>
+                    <span className="mono" style={{ color: '#94a3b8' }}>{verificationResult.reference_number}</span>
+                  </div>
+                </div>
+
+                {verificationResult.journal_entry_number && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--mint-neon)', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '6px' }}>
+                    <span>Voucher Jurnal: {verificationResult.journal_entry_number}</span>
+                    <span className="mono">Merkle Hash: {verificationResult.audit_merkle_hash?.slice(0, 16)}...</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
