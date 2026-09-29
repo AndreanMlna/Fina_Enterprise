@@ -707,8 +707,21 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
             </div>
           )}
 
-          {/* Search & Kategori */}
-          <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Search & Kategori - Sticky di bagian atas agar tidak tergulung saat scroll */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              position: 'sticky',
+              top: '0px',
+              zIndex: 10,
+              background: 'rgba(12, 19, 34, 0.95)',
+              backdropFilter: 'blur(12px)'
+            }}
+          >
             <div style={{ position: 'relative' }}>
               <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
               <input
@@ -773,61 +786,72 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
             </div>
           </div>
 
-          {/* Grid Produk / State Penanganan */}
-          {isLoadingCatalog ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
-              {[1, 2, 3, 4, 5, 6].map((idx) => (
-                <div key={idx} className="glass-panel" style={{ padding: '14px', height: '220px', opacity: 0.6 }}>
-                  <div style={{ width: '100%', height: '110px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', marginBottom: '12px' }} />
-                  <div style={{ width: '70%', height: '14px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '4px', marginBottom: '8px' }} />
-                  <div style={{ width: '40%', height: '12px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px' }} />
-                </div>
-              ))}
-            </div>
-          ) : catalogError ? (
-            <div className="glass-panel" style={{ padding: '36px 20px', textAlign: 'center', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-              <AlertCircle size={40} color="var(--rose-400)" style={{ margin: '0 auto 12px auto' }} />
-              <div style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.95rem', marginBottom: '4px' }}>Koneksi Katalog Terputus</div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 12px auto' }}>{catalogError}</p>
-              <button type="button" onClick={reloadCatalog} className="btn btn-sm btn-outline">Muat Ulang Katalog</button>
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center' }}>
-              <Package size={48} color="var(--text-muted)" style={{ opacity: 0.5, margin: '0 auto 12px auto' }} />
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', margin: '0 0 6px 0' }}>
-                {products.length === 0 ? 'Katalog Produk Masih Kosong' : 'Tidak Ada Produk yang Cocok'}
-              </h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
-                {products.length === 0
-                  ? 'Unit usaha Anda belum memiliki produk di basis data. Klik tombol di bawah untuk mendaftarkan produk baru.'
-                  : `Tidak ditemukan produk untuk "${searchQuery}".`}
-              </p>
-              {products.length === 0 ? (
-                <button type="button" onClick={handleOpenAddProduct} className="btn btn-primary btn-sm">
-                  <PlusCircle size={15} />
-                  <span>+ Tambah Produk Pertama</span>
-                </button>
-              ) : (
-                <button type="button" onClick={() => { setSearchQuery(''); setSelectedCategory('Semua'); }} className="btn btn-secondary btn-sm">
-                  Reset Pencarian
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
-              {filteredProducts.map((p) => (
-                <POSProductCard
-                  key={p.id}
-                  product={p}
-                  inCart={cart.find((c) => c.product.id === p.id)}
-                  onAddToCart={handleAddToCart}
-                  onEdit={handleOpenEditProduct}
-                  onDelete={handleRequestDelete}
-                  onOpenPricing={handleOpenRecipePricing}
-                />
-              ))}
-            </div>
-          )}
+          {/* Scrollable Products Grid Container (Mencegah Whole-Page Scrolling) */}
+          <div
+            className="pos-product-grid-scroll"
+            style={{
+              maxHeight: 'calc(100vh - 250px)',
+              overflowY: 'auto',
+              paddingRight: '6px',
+              paddingBottom: '24px'
+            }}
+          >
+            {/* Grid Produk / State Penanganan */}
+            {isLoadingCatalog ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
+                {[1, 2, 3, 4, 5, 6].map((idx) => (
+                  <div key={idx} className="glass-panel" style={{ padding: '14px', height: '220px', opacity: 0.6 }}>
+                    <div style={{ width: '100%', height: '110px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', marginBottom: '12px' }} />
+                    <div style={{ width: '70%', height: '14px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '4px', marginBottom: '8px' }} />
+                    <div style={{ width: '40%', height: '12px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px' }} />
+                  </div>
+                ))}
+              </div>
+            ) : catalogError ? (
+              <div className="glass-panel" style={{ padding: '36px 20px', textAlign: 'center', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                <AlertCircle size={40} color="var(--rose-400)" style={{ margin: '0 auto 12px auto' }} />
+                <div style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.95rem', marginBottom: '4px' }}>Koneksi Katalog Terputus</div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 12px auto' }}>{catalogError}</p>
+                <button type="button" onClick={reloadCatalog} className="btn btn-sm btn-outline">Muat Ulang Katalog</button>
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center' }}>
+                <Package size={48} color="var(--text-muted)" style={{ opacity: 0.5, margin: '0 auto 12px auto' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', margin: '0 0 6px 0' }}>
+                  {products.length === 0 ? 'Katalog Produk Masih Kosong' : 'Tidak Ada Produk yang Cocok'}
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+                  {products.length === 0
+                    ? 'Unit usaha Anda belum memiliki produk di basis data. Klik tombol di bawah untuk mendaftarkan produk baru.'
+                    : `Tidak ditemukan produk untuk "${searchQuery}".`}
+                </p>
+                {products.length === 0 ? (
+                  <button type="button" onClick={handleOpenAddProduct} className="btn btn-primary btn-sm">
+                    <PlusCircle size={15} />
+                    <span>+ Tambah Produk Pertama</span>
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => { setSearchQuery(''); setSelectedCategory('Semua'); }} className="btn btn-secondary btn-sm">
+                    Reset Pencarian
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
+                {filteredProducts.map((p) => (
+                  <POSProductCard
+                    key={p.id}
+                    product={p}
+                    inCart={cart.find((c) => c.product.id === p.id)}
+                    onAddToCart={handleAddToCart}
+                    onEdit={handleOpenEditProduct}
+                    onDelete={handleRequestDelete}
+                    onOpenPricing={handleOpenRecipePricing}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
 

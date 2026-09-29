@@ -961,6 +961,32 @@ tr.sticky-table-header th {
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
 }
 
+/* POS Dedicated Product Scroll Container */
+.pos-product-grid-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 223, 143, 0.35) rgba(15, 23, 42, 0.4);
+}
+
+.pos-product-grid-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pos-product-grid-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+}
+
+.pos-product-grid-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 223, 143, 0.28);
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.pos-product-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--mint-neon);
+}
+
+
 
 
 
