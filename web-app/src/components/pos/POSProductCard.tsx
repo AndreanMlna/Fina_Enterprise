@@ -31,7 +31,10 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
-        borderColor: inCart ? 'var(--emerald-500)' : 'var(--border-subtle)'
+        border: inCart ? '1px solid rgba(16, 185, 129, 0.6)' : '1px solid rgba(255, 255, 255, 0.08)',
+        background: inCart ? 'rgba(16, 185, 129, 0.05)' : 'rgba(18, 28, 50, 0.6)',
+        boxShadow: inCart ? '0 0 16px rgba(16, 185, 129, 0.16)' : 'none',
+        transition: 'all 0.2s ease'
       }}
       onClick={() => onAddToCart(product)}
     >
@@ -52,7 +55,7 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
         </div>
       )}
 
-      {/* Quick Edit/Delete/AI Pricing */}
+      {/* Quick Edit/Delete/AI Pricing — Subtle Glass Controls */}
       <div style={{ position: 'absolute', top: '8px', left: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>
         {onOpenPricing && (
           <button
@@ -63,12 +66,14 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
               onOpenPricing(product, e);
             }}
             style={{
-              background: 'rgba(15, 23, 42, 0.9)',
-              border: '1px solid rgba(168, 85, 247, 0.6)',
+              background: 'rgba(15, 23, 42, 0.82)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               color: '#c084fc',
               borderRadius: '6px',
               padding: '4px 6px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
           >
             <Sparkles size={12} />
@@ -79,12 +84,14 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
           title="Edit Produk"
           onClick={(e) => onEdit(product, e)}
           style={{
-            background: 'rgba(15, 23, 42, 0.85)',
-            border: '1px solid rgba(6, 182, 212, 0.4)',
-            color: 'var(--cyan-400)',
+            background: 'rgba(15, 23, 42, 0.82)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#38bdf8',
             borderRadius: '6px',
             padding: '4px 6px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
           }}
         >
           <Edit2 size={12} />
@@ -94,12 +101,14 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
           title="Hapus Produk"
           onClick={(e) => onDelete(product, e)}
           style={{
-            background: 'rgba(15, 23, 42, 0.85)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
+            background: 'rgba(15, 23, 42, 0.82)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
             color: '#f87171',
             borderRadius: '6px',
             padding: '4px 6px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
           }}
         >
           <Trash2 size={12} />
@@ -149,8 +158,17 @@ export const POSProductCard: React.FC<POSProductCardProps> = ({
             e.stopPropagation();
             onAddToCart(product);
           }}
-          className="btn btn-sm btn-outline"
-          style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: 'rgba(16, 185, 129, 0.4)', color: 'var(--emerald-400)' }}
+          className="btn btn-sm"
+          style={{
+            padding: '4px 10px',
+            fontSize: '0.75rem',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            color: '#34d399',
+            borderRadius: '6px',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
         >
           + Tambah
         </button>

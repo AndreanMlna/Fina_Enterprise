@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { AgentTraceDrawer } from './components/AgentTraceDrawer';
@@ -24,7 +24,8 @@ const InitialSetupView = React.lazy(() => import('./components/views/InitialSetu
 import { SupportReportModal } from './components/views/SupportReportModal';
 
 import type { NavigationTab, KPIStats, Tenant, UserRole, AppPage, SupportTicket, AgentTraceEvent } from './types';
-import { ShieldCheck, Database, Radio } from 'lucide-react';
+import type { MarginLeakageAlert } from './services/types';
+import { ShieldCheck, Database, Radio, PanelLeftOpen, ChevronDown } from 'lucide-react';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
@@ -44,6 +45,39 @@ export const App: React.FC = () => {
   const [agentTraces, setAgentTraces] = useState<AgentTraceEvent[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState<boolean>(false);
+  const [marginAlerts, setMarginAlerts] = useState<MarginLeakageAlert[]>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
+  const lastScrollTop = useRef<number>(0);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Header auto-hide berdasarkan arah scroll konten utama
+  const handleMainScroll = useCallback(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const st = el.scrollTop;
+    // Threshold: minimal 30px scroll sebelum hide, dan selalu tampil di bagian atas
+    if (st <= 30) {
+      setIsHeaderVisible(true);
+    } else if (st > lastScrollTop.current + 10) {
+      setIsHeaderVisible(false); // scroll down → hide
+    } else if (st < lastScrollTop.current - 10) {
+      setIsHeaderVisible(true);  // scroll up → show
+    }
+    lastScrollTop.current = st;
+  }, []);
+
+  // Shortcut Keyboard Global: Ctrl+B / Cmd+B untuk toggle hide/show Sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarCollapsed(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Session Re-hydration: Ambil profil dan tenant aktif dari JWT saat halaman dimuat/refresh
   useEffect(() => {
@@ -330,7 +364,7 @@ export const App: React.FC = () => {
               case 'cockpit':
                 return <CockpitView kpi={kpi} onNavigate={setActiveTab} tenant={currentTenant} />;
               case 'pos':
-                return <POSView tenant={currentTenant} onNavigateToLedger={() => setActiveTab('ledger')} />;
+                return <POSView tenant={currentTenant} onNavigateToLedger={() => setActiveTab('ledger')} onMarginAlertsChange={setMarginAlerts} />;
               case 'ledger':
                 return <LedgerView isPiiMasked={isPiiMasked} userRole={userRole} tenant={currentTenant} />;
               case 'montecarlo':
@@ -383,32 +417,82 @@ export const App: React.FC = () => {
 
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Top Enterprise Application Header */}
-      <Header 
-        kpi={kpi} 
-        tenant={currentTenant}
-        tenants={userTenants.length > 0 ? userTenants : (currentTenant ? [currentTenant] : [])}
-        onSelectTenant={setCurrentTenant}
-        userRole={userRole}
-        isPiiMasked={isPiiMasked}
-        onTogglePii={() => setIsPiiMasked(!isPiiMasked)}
-        onOpenTrace={() => setIsTraceOpen(true)}
-        traceCount={agentTraces.length}
-        onLogout={() => {
-          api.clearAuthToken();
-          setCurrentTenant(null);
-          setUserTenants([]);
-          setKpi({ liquidCash: 0, safetyBuffer: 0, cashRunwayDays: 0, financialHealthIndex: 0, marginLeakageMonthly: 0, activeAccountsReceivable: 0, estimatedTaxPP55: 0 });
-          setCurrentPage('homepage');
-        }}
-        onOpenSupportModal={() => setIsSupportModalOpen(true)}
-      />
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top Enterprise Application Header — Auto-hide on scroll */}
+      {/* Top Enterprise Application Header — Auto-hide on scroll dengan zero-layout-shift */}
+      <div style={{
+        maxHeight: isHeaderVisible ? '82px' : '0px',
+        opacity: isHeaderVisible ? 1 : 0,
+        transform: isHeaderVisible ? 'translateY(0)' : 'translateY(-100%)',
+        transition: 'max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease',
+        overflow: isHeaderVisible ? 'visible' : 'hidden',
+        flexShrink: 0,
+        zIndex: 100,
+        pointerEvents: isHeaderVisible ? 'auto' : 'none'
+      }}>
+        <Header 
+          kpi={kpi} 
+          tenant={currentTenant}
+          tenants={userTenants.length > 0 ? userTenants : (currentTenant ? [currentTenant] : [])}
+          onSelectTenant={setCurrentTenant}
+          userRole={userRole}
+          isPiiMasked={isPiiMasked}
+          onTogglePii={() => setIsPiiMasked(!isPiiMasked)}
+          onOpenTrace={() => setIsTraceOpen(true)}
+          traceCount={agentTraces.length}
+          onLogout={() => {
+            api.clearAuthToken();
+            setCurrentTenant(null);
+            setUserTenants([]);
+            setKpi({ liquidCash: 0, safetyBuffer: 0, cashRunwayDays: 0, financialHealthIndex: 0, marginLeakageMonthly: 0, activeAccountsReceivable: 0, estimatedTaxPP55: 0 });
+            setCurrentPage('homepage');
+          }}
+          onOpenSupportModal={() => setIsSupportModalOpen(true)}
+          marginAlerts={marginAlerts}
+          onEvaluateAlert={(_alert) => {
+            setActiveTab('pos');
+          }}
+          onDismissAlerts={() => setMarginAlerts([])}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+        />
+      </div>
+
+      {/* Floating Header Reveal Button (muncul halus saat header tersembunyi) */}
+      {!isHeaderVisible && (
+        <button
+          onClick={() => setIsHeaderVisible(true)}
+          title="Tampilkan Header Enterprise (Scroll ke atas atau klik)"
+          style={{
+            position: 'fixed',
+            top: '6px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 110,
+            background: 'rgba(17, 26, 36, 0.90)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '9999px',
+            padding: '4px 14px',
+            color: '#cbd5e1',
+            fontSize: '0.74rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <ChevronDown size={13} color="var(--emerald-400)" />
+          <span>Tampilkan Header</span>
+        </button>
+      )}
 
 
       {/* Main Workspace Body */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* Sidebar Navigation (RBAC-filtered berdasarkan userRole) */}
+        {/* Sidebar Navigation — Collapsible (RBAC-filtered berdasarkan userRole) */}
         <Sidebar 
           activeTab={activeTab} 
           onSelectTab={(tab) => {
@@ -420,19 +504,64 @@ export const App: React.FC = () => {
             setActiveTab(tab);
           }} 
           userRole={userRole} 
-          tenant={currentTenant} 
+          tenant={currentTenant}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         />
 
         {/* Dynamic Main Workspace Content */}
-        <main style={{
-          flex: 1,
-          padding: '0 24px 30px 16px',
-          overflowY: 'auto',
-          minWidth: 0
-        }}>
+        <main
+          ref={mainRef}
+          onScroll={handleMainScroll}
+          style={{
+            flex: 1,
+            padding: '8px 24px 30px 16px',
+            overflowY: 'auto',
+            minWidth: 0,
+            minHeight: 0
+          }}
+        >
           {renderActiveView()}
         </main>
       </div>
+
+      {/* Floating Sidebar Reveal Button (muncul saat sidebar di-hide / collapse) */}
+      {isSidebarCollapsed && (
+        <button
+          onClick={() => setIsSidebarCollapsed(false)}
+          title="Tampilkan Menu Navigasi (Ctrl+B)"
+          style={{
+            position: 'fixed',
+            left: '12px',
+            bottom: '16px',
+            zIndex: 95,
+            background: 'rgba(17, 26, 36, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(16, 185, 129, 0.4)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 10px rgba(16, 185, 129, 0.15)',
+            borderRadius: '24px',
+            padding: '7px 12px',
+            color: '#e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '7px',
+            cursor: 'pointer',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <PanelLeftOpen size={16} color="var(--emerald-400)" />
+          <span>Menu</span>
+          <span style={{
+            fontSize: '0.65rem',
+            background: 'rgba(255, 255, 255, 0.08)',
+            padding: '1px 5px',
+            borderRadius: '4px',
+            color: '#94a3b8'
+          }}>Ctrl+B</span>
+        </button>
+      )}
 
       {/* UMKM Support & Detailed Issue Reporting Modal */}
       <SupportReportModal 
@@ -455,41 +584,39 @@ export const App: React.FC = () => {
       <footer style={{
         background: 'rgba(6, 9, 17, 0.9)',
         borderTop: '1px solid var(--border-subtle)',
-        padding: '8px 24px',
+        padding: '6px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        fontSize: '0.74rem',
+        fontSize: '0.72rem',
         color: 'var(--text-muted)',
         zIndex: 50
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Radio size={12} color="var(--emerald-400)" />
-            <span>FinOrchestrator RPC: <strong style={{ color: '#ffffff' }}>Online (Latensi 12ms)</strong></span>
+            <Radio size={11} color="var(--emerald-400)" />
+            <span>API <strong style={{ color: '#ffffff' }}>Online</strong></span>
           </span>
-          <span>•</span>
+          <span style={{ color: 'rgba(255,255,255,0.15)' }}>•</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <ShieldCheck size={12} color="var(--cyan-500)" />
-            <span>Security: <strong style={{ color: '#ffffff' }}>AES-256 GCM + UU PDP Active</strong></span>
+            <ShieldCheck size={11} color="var(--cyan-500)" />
+            <span><strong style={{ color: '#ffffff' }}>AES-256</strong> + UU PDP</span>
           </span>
-          <span>•</span>
+          <span style={{ color: 'rgba(255,255,255,0.15)' }}>•</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Database size={12} color="var(--emerald-400)" />
-            <span>Storage: <strong style={{ color: '#ffffff' }}>PostgreSQL 16 + pgvector (HNSW)</strong></span>
+            <Database size={11} color="var(--emerald-400)" />
+            <span><strong style={{ color: '#ffffff' }}>PostgreSQL 16</strong></span>
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span>Tenant: <strong style={{ color: '#ffffff' }}>{currentTenant?.branchCode || 'BERKAH-HQ'}</strong></span>
-          <span>•</span>
-          <span>Role: <strong style={{ color: 'var(--emerald-400)' }}>{userRole}</strong></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span>{currentTenant?.branchCode || 'BERKAH-HQ'} <strong style={{ color: 'var(--emerald-400)' }}>{userRole}</strong></span>
           <span 
             className="mono" 
-            title="Akses Staf CS Internal: Tekan kombinasi [Ctrl + Shift + S] atau buka URL dengan parameter ?portal=cs"
-            style={{ cursor: 'help' }}
+            title="Akses Staf CS Internal: [Ctrl + Shift + S]"
+            style={{ cursor: 'help', opacity: 0.6 }}
           >
-            FINA Enterprise OS © 2026
+            FINA © 2026
           </span>
         </div>
       </footer>

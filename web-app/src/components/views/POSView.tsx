@@ -13,9 +13,7 @@ import {
   Calendar,
   Share2,
   Building2,
-  Sparkles,
-  Factory,
-  ShieldAlert
+  Factory
 } from 'lucide-react';
 import type { POSProduct, POSCartItem, POSReceipt, Tenant, StaffMember } from '../../types';
 import type { MarginLeakageAlert } from '../../services/types';
@@ -34,9 +32,10 @@ import { POSTimeManagementPanel } from '../pos/POSTimeManagementPanel';
 interface POSViewProps {
   tenant?: Tenant | null;
   onNavigateToLedger?: () => void;
+  onMarginAlertsChange?: (alerts: MarginLeakageAlert[]) => void;
 }
 
-export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) => {
+export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, onMarginAlertsChange }) => {
   // --- Katalog State ---
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -66,8 +65,6 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
   const [recipeProduct, setRecipeProduct] = useState<POSProduct | null>(null);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState<boolean>(false);
   const [isProductionRestockModalOpen, setIsProductionRestockModalOpen] = useState<boolean>(false);
-  const [marginAlerts, setMarginAlerts] = useState<MarginLeakageAlert[]>([]);
-  const [isDismissedMarginBanner, setIsDismissedMarginBanner] = useState<boolean>(false);
 
   // --- Konfirmasi Penghapusan Produk Enterprise (Zero Browser Alerts) ---
   const [productToDelete, setProductToDelete] = useState<POSProduct | null>(null);
@@ -96,8 +93,8 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
   const scanMarginLeakage = async () => {
     try {
       const res = await api.getMarginLeakageAlerts();
-      if (res && Array.isArray(res.alerts)) {
-        setMarginAlerts(res.alerts);
+      if (res && Array.isArray(res.alerts) && onMarginAlertsChange) {
+        onMarginAlertsChange(res.alerts);
       }
     } catch (err) {
       console.warn('[POSView] Gagal memindai margin leakage:', err);
@@ -386,9 +383,9 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
           ========================================================================= */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}>
-          <span style={{ color: 'var(--mint-neon)', fontWeight: 600 }}>Home</span>
+          <span style={{ color: '#cbd5e1', fontWeight: 600 }}>Home</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>/</span>
-          <span style={{ color: '#94a3b8' }}>Time Manage</span>
+          <span style={{ color: '#94a3b8' }}>POS</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -405,13 +402,13 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
               onClick={() => setPosSubTab('POS')}
               className={`homies-pill-btn ${posSubTab === 'POS' ? 'active' : ''}`}
             >
-              🛒 Terminal Kasir POS
+              🛒 Kasir POS
             </button>
             <button
               onClick={() => setPosSubTab('TIME_MANAGE')}
               className={`homies-pill-btn ${posSubTab === 'TIME_MANAGE' ? 'active' : ''}`}
             >
-              ⏱️ Time Management & Shift
+              ⏱️ Time & Shift
             </button>
           </div>
 
@@ -429,19 +426,19 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
           ========================================================================= */}
       <div>
         <h1 style={{ 
-          fontSize: '2.1rem', 
+          fontSize: '1.8rem', 
           fontWeight: 700, 
           color: '#FFFFFF', 
           letterSpacing: '-0.025em',
           margin: '0 0 4px 0',
           fontFamily: 'var(--font-display)'
         }}>
-          {posSubTab === 'POS' ? 'Point of Sale (POS) & Kasir' : 'Time Management Dashboard'}
+          {posSubTab === 'POS' ? 'Point of Sale' : 'Time Management'}
         </h1>
-        <p style={{ color: '#94a3b8', fontSize: '0.90rem', margin: 0 }}>
+        <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>
           {posSubTab === 'POS' 
-            ? 'Terminal Kasir Cepat • Auto-Posting Double-Entry SAK EMKM • Estimasi Pajak PP 55/2022'
-            : 'Monitor attendance, shifts, and employee productivity efficiently.'}
+            ? 'Terminal kasir • Double-entry SAK EMKM • PPh 55/2022'
+            : 'Monitor kehadiran, shift, dan produktivitas staf.'}
         </p>
       </div>
 
@@ -451,14 +448,14 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
       {posSubTab === 'POS' && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+          gap: '12px'
         }}>
           {/* POS Stat 1: Total Produk */}
-          <div className="homies-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div className="homies-card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '42px',
-              height: '42px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
               background: 'rgba(0, 223, 143, 0.12)',
               display: 'flex',
@@ -467,23 +464,23 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
               color: 'var(--mint-neon)',
               flexShrink: 0
             }}>
-              <Package size={20} />
+              <Package size={18} />
             </div>
             <div>
-              <div className="mono" style={{ fontSize: '1.45rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
+              <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
                 {products.length}
               </div>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
                 Katalog Siap Jual
               </div>
             </div>
           </div>
 
           {/* POS Stat 2: Total Nilai Inventori */}
-          <div className="homies-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div className="homies-card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '42px',
-              height: '42px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
               background: 'rgba(56, 189, 248, 0.12)',
               display: 'flex',
@@ -492,23 +489,23 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
               color: '#38BDF8',
               flexShrink: 0
             }}>
-              <Building2 size={20} />
+              <Building2 size={18} />
             </div>
             <div>
-              <div className="mono" style={{ fontSize: '1.20rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
+              <div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
                 {formatCurrency(totalInventoryValue)}
               </div>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
                 Total Nilai Stok
               </div>
             </div>
           </div>
 
           {/* POS Stat 3: Stok Fisik Tersedia */}
-          <div className="homies-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div className="homies-card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '42px',
-              height: '42px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
               background: 'rgba(245, 158, 11, 0.12)',
               display: 'flex',
@@ -517,38 +514,38 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
               color: '#FBBF24',
               flexShrink: 0
             }}>
-              <ShoppingCart size={20} />
+              <ShoppingCart size={18} />
             </div>
             <div>
-              <div className="mono" style={{ fontSize: '1.45rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
+              <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
                 {totalStockUnits}
               </div>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
                 Unit Stok Fisik
               </div>
             </div>
           </div>
 
           {/* POS Stat 4: Estimasi PPh Final PP 55 */}
-          <div className="homies-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div className="homies-card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '42px',
-              height: '42px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
-              background: 'rgba(0, 223, 143, 0.12)',
+              background: 'rgba(139, 92, 246, 0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--mint-neon)',
+              color: '#a78bfa',
               flexShrink: 0
             }}>
-              <CheckCircle2 size={20} />
+              <CheckCircle2 size={18} />
             </div>
             <div>
-              <div className="mono" style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--mint-neon)', lineHeight: 1.1 }}>
+              <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#a78bfa', lineHeight: 1.1 }}>
                 0.5%
               </div>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
                 PPh Final PP 55 (SAK EMKM)
               </div>
             </div>
@@ -571,24 +568,24 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
           ACTIVE CASHIER POS WORKSPACE (Katalog Produk & Keranjang)
           ========================================================================= */}
       {posSubTab === 'POS' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Header Action Bar */}
-          <div className="homies-card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+          <div className="homies-card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
-                background: 'rgba(0, 223, 143, 0.12)',
+                background: 'rgba(16, 185, 129, 0.12)',
                 padding: '8px',
                 borderRadius: '10px',
-                border: '1px solid rgba(0, 223, 143, 0.3)'
+                border: '1px solid rgba(16, 185, 129, 0.3)'
               }}>
-                <ShoppingCart size={20} color="var(--mint-neon)" />
+                <ShoppingCart size={20} color="var(--emerald-400)" />
               </div>
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#ffffff' }}>
-                  Katalog Kasir Toko & Inventori
+                  Katalog Produk
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#94a3b8' }}>
-                  {filteredProducts.length} Produk Siap Jual • Auto-Posting Double-Entry SAK EMKM
+                  {filteredProducts.length} produk • Auto-posting SAK EMKM
                 </p>
               </div>
             </div>
@@ -601,19 +598,27 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2))',
-                  border: '1px solid rgba(16, 185, 129, 0.4)',
-                  color: 'var(--mint-neon)'
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  color: '#c084fc'
                 }}
               >
                 <Factory size={14} />
-                <span>📦 Restock & Produksi AI</span>
+                <span>Restock & Produksi</span>
               </button>
 
               <button
                 onClick={handleOpenAddProduct}
-                className="homies-pill-btn active"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                className="homies-pill-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  border: 'none',
+                  color: '#ffffff',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.25)'
+                }}
               >
                 <PlusCircle size={14} />
                 <span>+ Produk Baru</span>
@@ -622,7 +627,14 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
               <button
                 onClick={() => setIsManageModalOpen(true)}
                 className="homies-pill-btn"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#cbd5e1'
+                }}
               >
                 <Settings size={14} />
                 <span>Kelola Stok</span>
@@ -635,77 +647,6 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
         
         {/* PANEL KIRI: Katalog Produk */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-          {/* Banner Peringatan Kebocoran Margin (Margin Leakage Guard) */}
-          {marginAlerts.length > 0 && !isDismissedMarginBanner && (
-            <div
-              style={{
-                padding: '14px 18px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(245, 158, 11, 0.12) 100%)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  background: 'rgba(239, 68, 68, 0.25)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#f87171',
-                  flexShrink: 0
-                }}>
-                  <ShieldAlert size={20} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>Peringatan Kebocoran Margin (AI Pricing Guard)</span>
-                    <span className="badge badge-rose" style={{ fontSize: '0.65rem' }}>
-                      {marginAlerts.length} Produk Berisiko Rugi!
-                    </span>
-                  </div>
-                  <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: '#cbd5e1' }}>
-                    Biaya bahan baku naik atau takaran BOM melebihi harga jual saat ini. Sesuaikan harga jual sekarang agar terhindar dari kerugian kasir!
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const firstAlertProd = products.find(p => p.id === marginAlerts[0]?.product_id);
-                    if (firstAlertProd) {
-                      handleOpenRecipePricing(firstAlertProd);
-                    } else {
-                      setIsProductionRestockModalOpen(true);
-                    }
-                  }}
-                  className="btn btn-sm btn-primary"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.76rem' }}
-                >
-                  <Sparkles size={13} />
-                  <span>Evaluasi {marginAlerts[0]?.product_name || 'Produk'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsDismissedMarginBanner(true)}
-                  style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-                  title="Tutup Peringatan"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Search & Kategori - Sticky di bagian atas agar tidak tergulung saat scroll */}
           <div
@@ -771,13 +712,15 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger }) 
                     fontSize: '0.78rem',
                     fontWeight: 600,
                     whiteSpace: 'nowrap',
-                    border: 'none',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                     background: selectedCategory === cat
-                      ? 'linear-gradient(135deg, var(--emerald-500), var(--cyan-600))'
-                      : 'rgba(30, 41, 59, 0.6)',
-                    color: selectedCategory === cat ? '#ffffff' : 'var(--text-muted)'
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(6, 182, 212, 0.18))'
+                      : 'rgba(255, 255, 255, 0.04)',
+                    border: selectedCategory === cat
+                      ? '1px solid rgba(16, 185, 129, 0.45)'
+                      : '1px solid rgba(255, 255, 255, 0.08)',
+                    color: selectedCategory === cat ? '#34d399' : '#94a3b8'
                   }}
                 >
                   {cat}

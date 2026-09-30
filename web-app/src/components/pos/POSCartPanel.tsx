@@ -280,7 +280,7 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
       <div>
         <label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
           <span>Opsi Pembayaran Saldo & Kasir:</span>
-          <span style={{ fontSize: '0.68rem', color: 'var(--mint-neon)' }}>0% Fee / Bebas Potongan</span>
+          <span style={{ fontSize: '0.68rem', color: '#34d399' }}>0% Fee / Bebas Potongan</span>
         </label>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
@@ -291,15 +291,16 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
             style={{
               padding: '8px 6px',
               borderRadius: '8px',
-              border: paymentMethod === 'CASH' ? '2px solid var(--emerald-500)' : '1px solid var(--border-subtle)',
-              background: paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(15, 23, 42, 0.6)',
-              color: paymentMethod === 'CASH' ? 'var(--emerald-400)' : 'var(--text-muted)',
+              border: paymentMethod === 'CASH' ? '1.5px solid rgba(16, 185, 129, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: paymentMethod === 'CASH' ? 'rgba(16, 185, 129, 0.14)' : 'rgba(255, 255, 255, 0.03)',
+              color: paymentMethod === 'CASH' ? '#34d399' : '#94a3b8',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: '4px',
               cursor: 'pointer',
-              textAlign: 'center'
+              textAlign: 'center',
+              transition: 'all 0.18s ease'
             }}
           >
             <Banknote size={17} />
@@ -314,15 +315,16 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
             style={{
               padding: '8px 6px',
               borderRadius: '8px',
-              border: paymentMethod === 'STATIC_QRIS' ? '2px solid var(--mint-neon)' : '1px solid var(--border-subtle)',
-              background: paymentMethod === 'STATIC_QRIS' ? 'rgba(0, 223, 143, 0.18)' : 'rgba(15, 23, 42, 0.6)',
-              color: paymentMethod === 'STATIC_QRIS' ? 'var(--mint-neon)' : 'var(--text-muted)',
+              border: paymentMethod === 'STATIC_QRIS' ? '1.5px solid rgba(56, 189, 248, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: paymentMethod === 'STATIC_QRIS' ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.03)',
+              color: paymentMethod === 'STATIC_QRIS' ? '#38bdf8' : '#94a3b8',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: '4px',
               cursor: 'pointer',
-              textAlign: 'center'
+              textAlign: 'center',
+              transition: 'all 0.18s ease'
             }}
           >
             <QrCode size={17} />
@@ -337,15 +339,16 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
             style={{
               padding: '8px 6px',
               borderRadius: '8px',
-              border: paymentMethod === 'QRIS' ? '2px solid var(--cyan-500)' : '1px solid var(--border-subtle)',
-              background: paymentMethod === 'QRIS' ? 'rgba(6, 182, 212, 0.18)' : 'rgba(15, 23, 42, 0.6)',
-              color: paymentMethod === 'QRIS' ? 'var(--cyan-400)' : 'var(--text-muted)',
+              border: paymentMethod === 'QRIS' ? '1.5px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: paymentMethod === 'QRIS' ? 'rgba(139, 92, 246, 0.14)' : 'rgba(255, 255, 255, 0.03)',
+              color: paymentMethod === 'QRIS' ? '#c084fc' : '#94a3b8',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: '4px',
               cursor: 'pointer',
-              textAlign: 'center'
+              textAlign: 'center',
+              transition: 'all 0.18s ease'
             }}
           >
             <Building2 size={17} />
@@ -383,14 +386,15 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
                 type="button"
                 onClick={() => onCashTenderedChange(nominal)}
                 style={{
-                  background: cashTendered === nominal ? 'var(--emerald-600)' : 'rgba(30, 41, 59, 0.7)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '4px',
+                  background: cashTendered === nominal ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                  color: cashTendered === nominal ? '#34d399' : '#cbd5e1',
+                  border: cashTendered === nominal ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '6px',
                   padding: '6px 2px',
                   fontSize: '0.70rem',
                   fontWeight: 600,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
                 }}
               >
                 Rp {(nominal / 1000)}k
@@ -400,14 +404,15 @@ export const POSCartPanel: React.FC<POSCartPanelProps> = ({
               type="button"
               onClick={() => onCashTenderedChange(grandTotal)}
               style={{
-                background: cashTendered === grandTotal && grandTotal > 0 ? 'var(--mint-neon)' : 'rgba(30, 41, 59, 0.7)',
-                color: cashTendered === grandTotal && grandTotal > 0 ? '#000000' : '#ffffff',
-                border: 'none',
-                borderRadius: '4px',
+                background: cashTendered === grandTotal && grandTotal > 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                color: cashTendered === grandTotal && grandTotal > 0 ? '#34d399' : '#cbd5e1',
+                border: cashTendered === grandTotal && grandTotal > 0 ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '6px',
                 padding: '6px 2px',
                 fontSize: '0.70rem',
                 fontWeight: 700,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
               }}
               title="Bayar dengan uang pas"
             >
