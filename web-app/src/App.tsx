@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { AgentTraceDrawer } from './components/AgentTraceDrawer';
@@ -25,7 +25,7 @@ import { SupportReportModal } from './components/views/SupportReportModal';
 
 import type { NavigationTab, KPIStats, Tenant, UserRole, AppPage, SupportTicket, AgentTraceEvent } from './types';
 import type { MarginLeakageAlert } from './services/types';
-import { ShieldCheck, Database, Radio, PanelLeftOpen, ChevronDown } from 'lucide-react';
+import { ShieldCheck, Database, Radio, PanelLeftOpen } from 'lucide-react';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
@@ -47,25 +47,6 @@ export const App: React.FC = () => {
   const [isSupportModalOpen, setIsSupportModalOpen] = useState<boolean>(false);
   const [marginAlerts, setMarginAlerts] = useState<MarginLeakageAlert[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
-  const lastScrollTop = useRef<number>(0);
-  const mainRef = useRef<HTMLElement>(null);
-
-  // Header auto-hide berdasarkan arah scroll konten utama
-  const handleMainScroll = useCallback(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    const st = el.scrollTop;
-    // Threshold: minimal 30px scroll sebelum hide, dan selalu tampil di bagian atas
-    if (st <= 30) {
-      setIsHeaderVisible(true);
-    } else if (st > lastScrollTop.current + 10) {
-      setIsHeaderVisible(false); // scroll down → hide
-    } else if (st < lastScrollTop.current - 10) {
-      setIsHeaderVisible(true);  // scroll up → show
-    }
-    lastScrollTop.current = st;
-  }, []);
 
   // Shortcut Keyboard Global: Ctrl+B / Cmd+B untuk toggle hide/show Sidebar
   useEffect(() => {
@@ -117,6 +98,7 @@ export const App: React.FC = () => {
                   marginLeakageMonthly: kpiData.margin_leakage_monthly,
                   activeAccountsReceivable: kpiData.active_accounts_receivable,
                   estimatedTaxPP55: kpiData.estimated_tax_pp55,
+                  totalRevenue: kpiData.total_revenue,
                 });
               }
             } catch { /* KPI fetch optional, dashboard shows zeros */ }
@@ -385,6 +367,7 @@ export const App: React.FC = () => {
                 return (
                   <InitialSetupView 
                     tenantName={currentTenant?.name}
+                    onNavigate={setActiveTab}
                     onSetupComplete={() => {
                       if (currentTenant) {
                         setCurrentTenant({ ...currentTenant, isSetupComplete: true });
@@ -418,18 +401,8 @@ export const App: React.FC = () => {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Top Enterprise Application Header — Auto-hide on scroll */}
-      {/* Top Enterprise Application Header — Auto-hide on scroll dengan zero-layout-shift */}
-      <div style={{
-        maxHeight: isHeaderVisible ? '82px' : '0px',
-        opacity: isHeaderVisible ? 1 : 0,
-        transform: isHeaderVisible ? 'translateY(0)' : 'translateY(-100%)',
-        transition: 'max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease',
-        overflow: isHeaderVisible ? 'visible' : 'hidden',
-        flexShrink: 0,
-        zIndex: 100,
-        pointerEvents: isHeaderVisible ? 'auto' : 'none'
-      }}>
+      {/* Top Enterprise Application Header — Stable Solid Enterprise Navigation */}
+      <div style={{ flexShrink: 0, zIndex: 100 }}>
         <Header 
           kpi={kpi} 
           tenant={currentTenant}
@@ -458,37 +431,6 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* Floating Header Reveal Button (muncul halus saat header tersembunyi) */}
-      {!isHeaderVisible && (
-        <button
-          onClick={() => setIsHeaderVisible(true)}
-          title="Tampilkan Header Enterprise (Scroll ke atas atau klik)"
-          style={{
-            position: 'fixed',
-            top: '6px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 110,
-            background: 'rgba(17, 26, 36, 0.90)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '9999px',
-            padding: '4px 14px',
-            color: '#cbd5e1',
-            fontSize: '0.74rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <ChevronDown size={13} color="var(--emerald-400)" />
-          <span>Tampilkan Header</span>
-        </button>
-      )}
-
 
       {/* Main Workspace Body */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -511,8 +453,6 @@ export const App: React.FC = () => {
 
         {/* Dynamic Main Workspace Content */}
         <main
-          ref={mainRef}
-          onScroll={handleMainScroll}
           style={{
             flex: 1,
             padding: '8px 24px 30px 16px',

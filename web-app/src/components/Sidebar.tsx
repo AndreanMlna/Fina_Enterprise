@@ -15,6 +15,7 @@ import {
   Coins,
   Star,
   Rocket,
+  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
@@ -143,7 +144,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
     (!navSearch.trim() || f.label.toLowerCase().includes(navSearch.toLowerCase()))
   );
 
-  const visibleOthers = OTHER_ITEMS.filter(o => 
+  const visibleOthers = OTHER_ITEMS.map(o => {
+    if (o.id === 'initial_setup') {
+      return {
+        ...o,
+        label: tenant?.isSetupComplete ? 'Monitoring Modal & Ekuitas' : 'Setup Modal & Saldo Awal',
+        icon: tenant?.isSetupComplete ? ShieldCheck : Rocket
+      };
+    }
+    return o;
+  }).filter(o => 
     o.allowedRoles.has(userRole) && 
     (!navSearch.trim() || o.label.toLowerCase().includes(navSearch.toLowerCase()))
   );
@@ -347,20 +357,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
           />
         </div>
         
-        {/* Onboarding Banner untuk Owner jika Saldo Awal Belum Diatur */}
-        {userRole === 'OWNER' && !tenant?.isSetupComplete && (
+        {/* Banner Navigasi Khusus Owner: Onboarding (jika baru) vs Monitoring Usaha (jika sudah berjalan) */}
+        {userRole === 'OWNER' && (
           <div 
             onClick={() => onSelectTab('initial_setup')}
             style={{
               padding: '10px 12px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(168,85,247,0.14) 100%)',
-              border: '1px solid rgba(129,140,248,0.4)',
+              background: activeTab === 'initial_setup'
+                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.16) 100%)'
+                : tenant?.isSetupComplete
+                  ? 'rgba(255, 255, 255, 0.03)'
+                  : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)',
+              border: activeTab === 'initial_setup'
+                ? '1px solid rgba(0, 223, 143, 0.5)'
+                : tenant?.isSetupComplete
+                  ? '1px solid rgba(255, 255, 255, 0.08)'
+                  : '1px solid rgba(16, 185, 129, 0.3)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              boxShadow: '0 2px 10px rgba(99,102,241,0.15)',
+              boxShadow: activeTab === 'initial_setup' ? '0 2px 10px rgba(0, 223, 143, 0.15)' : 'none',
               transition: 'all 0.2s ease',
             }}
           >
@@ -368,20 +386,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
               width: '28px',
               height: '28px',
               borderRadius: '8px',
-              background: 'rgba(99,102,241,0.25)',
+              background: tenant?.isSetupComplete ? 'rgba(56, 189, 248, 0.16)' : 'rgba(0, 223, 143, 0.20)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              <Rocket size={15} color="#A5B4FC" />
+              {tenant?.isSetupComplete ? (
+                <ShieldCheck size={16} color="#38BDF8" />
+              ) : (
+                <Rocket size={15} color="var(--mint-neon)" />
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#E0E7FF' }}>
-                Setup Saldo Awal
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#FFFFFF' }}>
+                {tenant?.isSetupComplete ? 'Monitoring Usaha' : 'Setup Saldo Awal'}
               </span>
-              <span style={{ fontSize: '0.66rem', color: '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                Input kas, stok & aset awal ➔
+              <span style={{ fontSize: '0.66rem', color: tenant?.isSetupComplete ? '#38BDF8' : '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {tenant?.isSetupComplete ? 'Evaluasi modal & eksekusi ➔' : 'Input kas, stok & aset awal ➔'}
               </span>
             </div>
           </div>

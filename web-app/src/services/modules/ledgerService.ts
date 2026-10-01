@@ -12,7 +12,7 @@ export class LedgerService {
    * Mengambil daftar jurnal pembukuan dari database (tenant-scoped via JWT)
    */
   async getLedgerEntries(): Promise<LedgerEntry[]> {
-    return httpClient.get<LedgerEntry[]>('/api/v1/ledger/entries', []);
+    return httpClient.get<LedgerEntry[]>('/api/v1/ledger/entries?limit=100', []);
   }
 
   /**

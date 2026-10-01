@@ -12,11 +12,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 import uuid
 
 from app.api.v1.auth import get_current_user, require_role
-from app.domain.models import UserCredential, Tenant, Product, Account
+from app.domain.models import UserCredential, Tenant, Product, Account, JournalEntry, JournalLine
 from app.domain.services import AccountingService
 from app.domain.rules.sak_emkm_rules import SAKEMKMValidationError
 from app.infrastructure.database import get_db
@@ -86,10 +86,19 @@ class InitialBalanceResponse(BaseModel):
 
 
 class SetupStatusResponse(BaseModel):
-    """Status apakah tenant sudah melakukan setup saldo awal."""
+    """Status apakah tenant sudah melakukan setup saldo awal beserta ringkasan modal awal & monitoring."""
     is_setup_complete: bool
     tenant_id: str
     tenant_name: str
+    operating_status: str = Field(default="OPERATIONAL", description="'ONBOARDING' atau 'OPERATIONAL'")
+    initial_equity: float = Field(default=0.0, description="Modal pemilik awal terdaftar (Rp)")
+    initial_cash_bank: float = Field(default=0.0, description="Kas & saldo bank awal (Rp)")
+    initial_fixed_assets: float = Field(default=0.0, description="Nilai perolehan aset tetap awal (Rp)")
+    current_total_assets: float = Field(default=0.0, description="Total aset berjalan saat ini (Rp)")
+    initial_date: Optional[str] = Field(default=None, description="Tanggal efektif saldo awal (YYYY-MM-DD)")
+    journal_entry_number: Optional[str] = Field(default=None, description="Nomor jurnal pembukuan saldo awal")
+    audit_merkle_hash: Optional[str] = Field(default=None, description="Hash kriptografis pembukuan saldo awal")
+    total_journals_count: int = Field(default=0, description="Total jurnal transaksi yang telah berjalan")
 
 
 # --- Endpoints ---
@@ -97,7 +106,7 @@ class SetupStatusResponse(BaseModel):
 @router.get(
     "/status",
     response_model=SetupStatusResponse,
-    summary="Cek Status Setup Saldo Awal Tenant"
+    summary="Cek Status Setup Saldo Awal & Monitoring Modal Tenant"
 )
 async def check_setup_status(
     current_user: UserCredential = Depends(get_current_user),
@@ -105,7 +114,8 @@ async def check_setup_status(
 ):
     """
     Mengecek apakah tenant dari pengguna yang terautentikasi
-    sudah menyelesaikan setup saldo awal (Initial Capital Balance).
+    sudah menyelesaikan setup saldo awal (Initial Capital Balance)
+    atau sudah dalam tahap aktif berjalan (Monitoring & Evaluasi Usaha).
     """
     tenant = await db.get(Tenant, current_user.tenant_id)
     if not tenant:
@@ -114,10 +124,103 @@ async def check_setup_status(
             detail="Tenant tidak ditemukan."
         )
 
+    # 1. Cek total entri jurnal yang telah dibukukan oleh tenant
+    journal_count_res = await db.execute(
+        select(func.count(JournalEntry.id)).where(JournalEntry.tenant_id == tenant.id)
+    )
+    total_journals = journal_count_res.scalar() or 0
+
+    # 2. Invarian: Jika tenant sudah memiliki jurnal transaksi, maka otomatis setup selesai
+    is_complete = bool(tenant.is_setup_complete or total_journals > 0)
+    if is_complete and not tenant.is_setup_complete:
+        tenant.is_setup_complete = True
+        await db.commit()
+
+    initial_equity = 0.0
+    initial_cash_bank = 0.0
+    initial_fixed_assets = 0.0
+    current_total_assets = 0.0
+    initial_date = None
+    journal_entry_number = None
+    audit_merkle_hash = None
+
+    if is_complete:
+        # Kalkulasi modal awal dari akun 3101
+        eq_res = await db.execute(
+            select(func.sum(JournalLine.credit - JournalLine.debit))
+            .join(Account, JournalLine.account_id == Account.id)
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .where(
+                JournalEntry.tenant_id == tenant.id,
+                Account.code == "3101"
+            )
+        )
+        initial_equity = float(eq_res.scalar() or 0.0)
+
+        # Kas & Bank awal
+        cash_res = await db.execute(
+            select(func.sum(JournalLine.debit - JournalLine.credit))
+            .join(Account, JournalLine.account_id == Account.id)
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .where(
+                JournalEntry.tenant_id == tenant.id,
+                Account.code.in_(["1101", "1102"]),
+                JournalEntry.entry_number.like("%OB%")
+            )
+        )
+        initial_cash_bank = float(cash_res.scalar() or 0.0)
+
+        # Aset tetap awal
+        fa_res = await db.execute(
+            select(func.sum(JournalLine.debit - JournalLine.credit))
+            .join(Account, JournalLine.account_id == Account.id)
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .where(
+                JournalEntry.tenant_id == tenant.id,
+                Account.code.in_(["1201", "1203"]),
+                JournalEntry.entry_number.like("%OB%")
+            )
+        )
+        initial_fixed_assets = float(fa_res.scalar() or 0.0)
+
+        # Total aset berjalan saat ini (kategori ASSET)
+        curr_asset_res = await db.execute(
+            select(func.sum(JournalLine.debit - JournalLine.credit))
+            .join(Account, JournalLine.account_id == Account.id)
+            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .where(
+                JournalEntry.tenant_id == tenant.id,
+                Account.category == "ASSET"
+            )
+        )
+        current_total_assets = float(curr_asset_res.scalar() or 0.0)
+
+        # Jurnal pembukuan awal pertama
+        first_entry_res = await db.execute(
+            select(JournalEntry)
+            .where(JournalEntry.tenant_id == tenant.id)
+            .order_by(JournalEntry.entry_date)
+            .limit(1)
+        )
+        first_entry = first_entry_res.scalar_one_or_none()
+        if first_entry:
+            initial_date = first_entry.entry_date
+            journal_entry_number = first_entry.entry_number
+            audit_merkle_hash = first_entry.audit_merkle_hash
+
     return SetupStatusResponse(
-        is_setup_complete=bool(tenant.is_setup_complete),
+        is_setup_complete=is_complete,
         tenant_id=tenant.id,
         tenant_name=tenant.name,
+        operating_status="OPERATIONAL" if is_complete else "ONBOARDING",
+        initial_equity=initial_equity,
+        initial_cash_bank=initial_cash_bank,
+        initial_fixed_assets=initial_fixed_assets,
+        current_total_assets=current_total_assets,
+        initial_date=initial_date,
+        journal_entry_number=journal_entry_number,
+        audit_merkle_hash=audit_merkle_hash,
+        total_journals_count=total_journals,
     )
 
 

@@ -37,6 +37,7 @@ export interface KPIStats {
   marginLeakageMonthly: number;
   activeAccountsReceivable: number;
   estimatedTaxPP55: number;
+  totalRevenue?: number;
 }
 
 export interface DoubleEntryVoucher {

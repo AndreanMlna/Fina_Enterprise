@@ -31,6 +31,7 @@ class KPIDashboardSchema(BaseModel):
     margin_leakage_monthly: float
     active_accounts_receivable: float
     estimated_tax_pp55: float
+    total_revenue: float = 0.0
 
 
 class RunwayBaselineSchema(BaseModel):
@@ -118,7 +119,8 @@ async def get_kpi_dashboard(
         financial_health_index=round(health_index, 0),
         margin_leakage_monthly=margin_leakage,
         active_accounts_receivable=accounts_receivable,
-        estimated_tax_pp55=tax_pp55
+        estimated_tax_pp55=tax_pp55,
+        total_revenue=total_revenue
     )
 
 

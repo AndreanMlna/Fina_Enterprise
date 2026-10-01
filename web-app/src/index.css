@@ -650,6 +650,7 @@ h1, h2, h3, h4, h5, h6 {
    Internal Table Scroll Container & Sticky Table Header
    ========================================================================== */
 .table-scroll-container {
+  max-height: 420px;
   overflow-y: auto;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -674,13 +675,14 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(255, 255, 255, 0.3);
 }
 
+.sticky-table-header,
 .sticky-table-header th,
 tr.sticky-table-header th {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #0c1322 !important;
-  box-shadow: 0 1px 0 var(--border-subtle);
+  background: var(--bg-homies-card, #111A24) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* ==========================================================================
@@ -847,21 +849,44 @@ tr.sticky-table-header th {
 
 /* Sleek Dropdown Select */
 .homies-select {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: #0F172A;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  color: #94A3B8;
+  color: #E2E8F0;
   font-size: 0.75rem;
-  padding: 4px 10px;
+  padding: 5px 10px;
   outline: none;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
 .homies-select:hover, .homies-select:focus {
-  background: rgba(255, 255, 255, 0.07);
+  background-color: #162032;
   color: #FFFFFF;
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(0, 223, 143, 0.45);
+  box-shadow: 0 0 10px rgba(0, 223, 143, 0.12);
+}
+
+.homies-select option,
+select.homies-select option,
+select option {
+  background-color: #0F172A !important;
+  color: #FFFFFF !important;
+  padding: 6px 12px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.homies-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 223, 143, 0.2);
+  border-top-color: var(--mint-neon);
+  animation: spin 0.8s linear infinite;
 }
 
 /* Horizontal Progress Bars */

@@ -143,6 +143,7 @@ export interface KPIDashboardResponse {
   margin_leakage_monthly: number;
   active_accounts_receivable: number;
   estimated_tax_pp55: number;
+  total_revenue?: number;
 }
 
 export interface InvoiceItem {
@@ -209,6 +210,15 @@ export interface SetupStatusResponse {
   is_setup_complete: boolean;
   tenant_id: string;
   tenant_name: string;
+  operating_status?: 'ONBOARDING' | 'OPERATIONAL';
+  initial_equity?: number;
+  initial_cash_bank?: number;
+  initial_fixed_assets?: number;
+  current_total_assets?: number;
+  initial_date?: string;
+  journal_entry_number?: string;
+  audit_merkle_hash?: string;
+  total_journals_count?: number;
 }
 
 // --- Dynamic Pricing, Bill of Materials (BOM) & Production ---

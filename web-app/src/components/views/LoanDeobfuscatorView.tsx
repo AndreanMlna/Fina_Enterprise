@@ -1,13 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  ShieldAlert, 
   AlertTriangle, 
   Calculator,
   Scale,
   Save,
   Trash2,
   CheckCircle,
-  ShieldCheck,
   History,
   Loader2
 } from 'lucide-react';
@@ -123,16 +121,10 @@ export const LoanDeobfuscatorView: React.FC = () => {
       {/* Header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-          <h2 style={{ fontSize: '1.6rem', color: '#ffffff' }}>Anti-Predatory Loan Deobfuscator</h2>
-          <span className="badge badge-rose">
-            <ShieldAlert size={12} /> Real APR Calculation Engine
-          </span>
-          <span className="badge badge-emerald">
-            <ShieldCheck size={12} /> PostgreSQL Audit Trail
-          </span>
+          <h2 style={{ fontSize: '1.6rem', color: '#ffffff' }}>Kalkulator Anti-Rentenir</h2>
         </div>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-          Membongkar skema biaya tersembunyi pinjaman digital & rentenir siber. Mengonversi klaim "bunga ringan per hari" menjadi persentase APR Efektif Riil Tahunan.
+          Hitung suku bunga riil tahunan (APR) dan periksa biaya tersembunyi pada penawaran pinjaman usaha.
         </p>
       </div>
 
@@ -261,7 +253,7 @@ export const LoanDeobfuscatorView: React.FC = () => {
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}
           >
             <Save size={15} />
-            <span>{isSaving ? 'Menyimpan...' : 'Simpan Hasil Uji ke PostgreSQL'}</span>
+            <span>{isSaving ? 'Menyimpan...' : 'Simpan Hasil Evaluasi'}</span>
           </button>
         </div>
 
@@ -269,7 +261,7 @@ export const LoanDeobfuscatorView: React.FC = () => {
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '1.05rem', color: '#ffffff' }}>
-              Hasil Dekonstruksi Biaya Riil (Deobfuscation)
+              Analisis Biaya Riil Pinjaman
             </h3>
             <span className={`badge ${analysis.threatLevel === 'PREDATORY_EXTREME' ? 'badge-rose' : analysis.threatLevel === 'MODERATE' ? 'badge-amber' : 'badge-emerald'}`}>
               {analysis.threatLevel === 'PREDATORY_EXTREME' ? 'BAHAYA PREDATORI TINGGI' : analysis.threatLevel === 'MODERATE' ? 'WASPADA BIAYA TINGGI' : 'BUNGA AMAN'}
@@ -356,11 +348,11 @@ export const LoanDeobfuscatorView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <History size={18} color="var(--emerald-400)" />
             <h3 style={{ fontSize: '1.05rem', color: '#ffffff', margin: 0 }}>
-              Riwayat Audit Penawaran Pinjaman (Tersimpan di PostgreSQL)
+              Riwayat Evaluasi Pinjaman
             </h3>
           </div>
           <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-            {savedEvaluations.length} Rekam Audit Tersimpan
+            {savedEvaluations.length} Riwayat Tersimpan
           </span>
         </div>
 
