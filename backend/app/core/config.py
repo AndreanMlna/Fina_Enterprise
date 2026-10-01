@@ -29,6 +29,12 @@ class Settings(BaseSettings):
             # asyncpg mengharuskan parameter ssl=require (bukan sslmode=require dari libpq)
             if "sslmode=require" in url:
                 url = url.replace("sslmode=require", "ssl=require")
+            # asyncpg tidak menerima parameter channel_binding yang ditambahkan konsol Neon
+            if "channel_binding=" in url:
+                import re
+                url = re.sub(r'[\?&]channel_binding=[^&]*', '', url)
+                if '?' not in url and '&' in url:
+                    url = url.replace('&', '?', 1)
             return url
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
@@ -41,6 +47,8 @@ class Settings(BaseSettings):
                 url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
             elif url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql://", 1)
+            if "ssl=require" in url and "sslmode=require" not in url:
+                url = url.replace("ssl=require", "sslmode=require")
             return url
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 

@@ -43,11 +43,18 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 async def run_async_migrations() -> None:
+    connect_args = {}
+    if "ssl=require" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+        connect_args["ssl"] = True
+    if "pooler" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+        connect_args["statement_cache_size"] = 0
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=settings.DATABASE_URL
+        url=settings.DATABASE_URL,
+        connect_args=connect_args
     )
 
     async with connectable.connect() as connection:

@@ -10,6 +10,8 @@ class Base(DeclarativeBase):
 connect_args: dict = {}
 if "ssl=require" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
     connect_args["ssl"] = True
+if "pooler" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+    connect_args["statement_cache_size"] = 0
 
 import os
 
