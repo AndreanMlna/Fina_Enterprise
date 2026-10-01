@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Send, 
   CheckCheck, 
-  Phone,
-  ShieldCheck,
-  Loader2,
-  PlusCircle,
-  CreditCard,
-  Scan,
-  Upload,
-  ShieldAlert,
-  CheckCircle2,
-  X
+  ShieldCheck, 
+  Loader2, 
+  PlusCircle
 } from 'lucide-react';
 import { api } from '../../services/api';
 import type { ARDunningInvoice, CreateInvoicePayload, VerifyTransferProofResponse } from '../../types';
-import { formatCurrency, maskPhone, maskCustomerName } from '../../utils';
+import { formatCurrency, maskCustomerName } from '../../utils';
+import { 
+  DunningInvoicesTable, 
+  DunningWhatsAppPreview, 
+  DunningCreateInvoiceModal, 
+  DunningVerifyTransferModal,
+  type NewInvoiceFormData 
+} from '../dunning';
 
 const getDefaultDueDate = (): string => {
   return new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().split('T')[0];
@@ -37,12 +36,12 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
   // Modal Buat Invoice Baru
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
-  const [invoiceForm, setInvoiceForm] = useState({
+  const [invoiceForm, setInvoiceForm] = useState<NewInvoiceFormData>({
     customer_name: '',
     customer_phone: '',
     amount: '',
     due_date: getDefaultDueDate(),
-    suggested_tone: 'FRIENDLY' as const
+    suggested_tone: 'FRIENDLY'
   });
 
   // State Pelunasan Invoice
@@ -144,7 +143,6 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
   }, []);
 
   const maskCustomer = (name: string) => maskCustomerName(name, isPiiMasked);
-  const maskPhoneNumber = (phone: string) => maskPhone(phone, isPiiMasked);
 
   const getDunningMessage = () => {
     if (!selectedInvoice) return '';
@@ -224,7 +222,7 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
         customer_name: '',
         customer_phone: '',
         amount: '',
-        due_date: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().split('T')[0],
+        due_date: getDefaultDueDate(),
         suggested_tone: 'FRIENDLY'
       });
       await fetchInvoices();
@@ -286,661 +284,60 @@ export const DunningView: React.FC<DunningViewProps> = ({ isPiiMasked = false })
       {/* Main Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr', gap: '20px' }}>
         {/* Invoices Aging Table */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.05rem', color: '#ffffff' }}>
-              Daftar Piutang Jatuh Tempo (Accounts Receivable)
-            </h3>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-              Total: {invoices.length} Invoice di PostgreSQL
-            </span>
-          </div>
-
-          {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
-              <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px auto', display: 'block', color: 'var(--emerald-400)' }} />
-              <span>Memuat data invoice piutang dari PostgreSQL...</span>
-            </div>
-          ) : errorMessage ? (
-            <div style={{ textAlign: 'center', padding: '24px', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-              <p style={{ color: 'var(--rose-400)', fontSize: '0.85rem' }}>{errorMessage}</p>
-              <button className="btn btn-sm btn-primary" onClick={fetchInvoices}>Muat Ulang</button>
-            </div>
-          ) : invoices.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>
-              <ShieldCheck size={40} style={{ opacity: 0.4, margin: '0 auto 8px auto', display: 'block', color: 'var(--emerald-400)' }} />
-              <p style={{ fontWeight: 700, color: '#ffffff', margin: '0 0 4px 0' }}>Tidak Ada Piutang Tertunggak</p>
-              <p style={{ fontSize: '0.8rem', margin: '0 0 12px 0' }}>Semua tagihan pelanggan berada dalam status lunas atau belum ada invoice diterbitkan.</p>
-              <button className="btn btn-sm btn-outline" onClick={() => setIsCreateModalOpen(true)}>
-                + Buat Invoice Piutang Pertama
-              </button>
-            </div>
-          ) : (
-            <div className="table-scroll-container" style={{ maxHeight: 'calc(100vh - 310px)', minHeight: '420px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                <thead className="sticky-table-header">
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>Invoice & Pelanggan</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Nominal</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Status</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Rekomendasi</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Aksi Verifikasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => {
-                    const isSelected = selectedInvoice?.id === inv.id;
-                    const isPaid = inv.status === 'PAID';
-                    return (
-                      <tr 
-                        key={inv.id}
-                        onClick={() => {
-                          setSelectedInvoice(inv);
-                          setSelectedTone(inv.suggestedTone);
-                        }}
-                        style={{
-                          borderBottom: '1px solid var(--border-subtle)',
-                          cursor: 'pointer',
-                          background: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
-                          opacity: isPaid ? 0.65 : 1
-                        }}
-                      >
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: 600, color: '#ffffff', textDecoration: isPaid ? 'line-through' : 'none' }}>
-                            {maskCustomer(inv.customerName)}
-                          </div>
-                          <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {inv.invoiceNumber} • {maskPhoneNumber(inv.customerPhone)}
-                          </div>
-                        </td>
-                        <td className="mono" style={{ padding: '12px', textAlign: 'right', fontWeight: 700, color: isPaid ? 'var(--text-muted)' : 'var(--emerald-400)' }}>
-                          {formatCurrency(inv.amount)}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          {isPaid ? (
-                            <span className="badge badge-emerald">LUNAS</span>
-                          ) : inv.daysOverdue > 15 ? (
-                            <span className="badge badge-rose">+{inv.daysOverdue} Hari Lewat</span>
-                          ) : inv.daysOverdue > 0 ? (
-                            <span className="badge badge-amber">+{inv.daysOverdue} Hari Lewat</span>
-                          ) : (
-                            <span className="badge badge-emerald">Jatuh Tempo Normal</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <span className="badge badge-indigo">
-                            {inv.suggestedTone}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          {!isPaid ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenVerifyModal(inv);
-                              }}
-                              className="btn btn-sm btn-primary"
-                              style={{
-                                fontSize: '0.68rem',
-                                padding: '4px 8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
-                                color: '#000000',
-                                fontWeight: 700
-                              }}
-                              title="Unggah dan verifikasi bukti transfer m-Banking dengan AI Vision"
-                            >
-                              <Scan size={12} />
-                              <span>Cek Bukti</span>
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.70rem', color: 'var(--emerald-400)', fontWeight: 600 }}>
-                              ✓ Selesai
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <DunningInvoicesTable 
+          invoices={invoices}
+          selectedInvoice={selectedInvoice}
+          onSelectInvoice={(inv) => {
+            setSelectedInvoice(inv);
+            setSelectedTone(inv.suggestedTone);
+          }}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+          onRetry={fetchInvoices}
+          onCreateInvoiceClick={() => setIsCreateModalOpen(true)}
+          onOpenVerifyModal={handleOpenVerifyModal}
+          isPiiMasked={isPiiMasked}
+        />
 
         {/* WhatsApp Dunning Preview & Settle Action */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '20px', alignSelf: 'start' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <h3 style={{ fontSize: '1.05rem', color: '#ffffff' }}>
-              Simulator Pesan Tagihan WhatsApp
-            </h3>
-
-            {/* Tombol Pelunasan Cepat jika belum lunas */}
-            {selectedInvoice && selectedInvoice.status !== 'PAID' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <button 
-                  className="btn btn-sm btn-primary"
-                  onClick={() => handleOpenVerifyModal(selectedInvoice)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
-                    color: '#000000',
-                    fontWeight: 700,
-                    fontSize: '0.72rem',
-                    padding: '6px 10px'
-                  }}
-                  title="Opsi 3: Verifikasi bukti transfer m-Banking menggunakan AI Vision & ELA"
-                >
-                  <Scan size={13} />
-                  <span>Verifikasi Transfer AI</span>
-                </button>
-
-                <button 
-                  className="btn btn-sm btn-outline"
-                  onClick={handlePayInvoice}
-                  disabled={isPaying}
-                  title="Tandai invoice lunas manual dan bukukan otomatis ke SAK EMKM"
-                  style={{ borderColor: 'var(--emerald-500)', color: 'var(--emerald-400)', fontSize: '0.72rem', padding: '6px 8px' }}
-                >
-                  <CreditCard size={13} />
-                  <span>{isPaying ? '...' : 'Bayar Tunai'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Tone Selector */}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {(['FRIENDLY', 'REMINDER', 'FORMAL_URGENT'] as const).map((tone) => (
-              <button
-                key={tone}
-                onClick={() => setSelectedTone(tone)}
-                className={`btn btn-sm ${selectedTone === tone ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: 1, fontSize: '0.72rem', padding: '6px 4px' }}
-              >
-                {tone === 'FRIENDLY' ? 'Santun (H-3)' : tone === 'REMINDER' ? 'Mengingatkan' : 'Somasi Formal'}
-              </button>
-            ))}
-          </div>
-
-          {/* WhatsApp Interface Mockup */}
-          <div style={{
-            background: '#0b141a',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative'
-          }}>
-            {/* Top Bar WhatsApp */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#25d366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontWeight: 700, fontSize: '0.82rem' }}>
-                WA
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>
-                  {selectedInvoice ? maskCustomer(selectedInvoice.customerName) : 'Tidak ada invoice terpilih'}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--emerald-400)' }}>
-                  Online • WhatsApp Business Official
-                </div>
-              </div>
-              <Phone size={16} color="var(--text-muted)" />
-            </div>
-
-            {/* Chat Bubble */}
-            <div style={{
-              background: '#005c4b',
-              color: '#e9edef',
-              padding: '12px 14px',
-              borderRadius: '8px 8px 0px 8px',
-              maxWidth: '92%',
-              alignSelf: 'flex-end',
-              margin: '16px 0',
-              fontSize: '0.82rem',
-              lineHeight: 1.45,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-              position: 'relative'
-            }}>
-              {getDunningMessage() || 'Pilih invoice di tabel sebelah kiri untuk mempratinjau draft penagihan otomatis.'}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)' }}>
-                <span>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                <CheckCheck size={14} color="#53bdeb" />
-              </div>
-            </div>
-
-            {sendSuccessMsg && (
-              <div style={{
-                padding: '8px 12px',
-                background: 'rgba(16, 185, 129, 0.2)',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                borderRadius: '4px',
-                fontSize: '0.74rem',
-                color: 'var(--emerald-400)',
-                marginBottom: '10px',
-                textAlign: 'center'
-              }}>
-                ✓ {sendSuccessMsg}
-              </div>
-            )}
-
-            {/* Send Trigger */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Target: {selectedInvoice ? maskPhoneNumber(selectedInvoice.customerPhone) : '-'}
-              </span>
-              <button 
-                className="btn btn-primary"
-                onClick={handleSendWhatsApp}
-                disabled={isSending || !selectedInvoice || selectedInvoice.status === 'PAID'}
-              >
-                <Send size={15} />
-                <span>{isSending ? 'Mengirim...' : selectedInvoice?.status === 'PAID' ? 'Tagihan Telah Lunas' : 'Kirim Pesan WhatsApp Otomatis'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <DunningWhatsAppPreview 
+          selectedInvoice={selectedInvoice}
+          selectedTone={selectedTone}
+          onSelectTone={setSelectedTone}
+          dunningMessage={getDunningMessage()}
+          isSending={isSending}
+          sendSuccessMsg={sendSuccessMsg}
+          onSendWhatsApp={handleSendWhatsApp}
+          onOpenVerifyModal={handleOpenVerifyModal}
+          onPayInvoice={handlePayInvoice}
+          isPaying={isPaying}
+          isPiiMasked={isPiiMasked}
+        />
       </div>
 
       {/* Modal Terbitkan Invoice Baru */}
-      {isCreateModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '16px'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%',
-            maxWidth: '480px',
-            padding: '24px',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-medium)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <PlusCircle size={18} color="var(--emerald-400)" />
-                <h3 style={{ fontSize: '1.15rem', color: '#ffffff', margin: 0 }}>Terbitkan Invoice Baru</h3>
-              </div>
-              <button 
-                className="btn btn-sm btn-secondary"
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ padding: '4px' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Nama Pelanggan / Entitas Mitra *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  placeholder="Contoh: PT Katering Mandiri Sejahtera"
-                  value={invoiceForm.customer_name}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid var(--border-medium)',
-                    color: '#ffffff',
-                    fontSize: '0.85rem'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Nomor WhatsApp Pelanggan *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  placeholder="Contoh: 081298765432"
-                  value={invoiceForm.customer_phone}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, customer_phone: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid var(--border-medium)',
-                    color: '#ffffff',
-                    fontSize: '0.85rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Nominal Piutang (Rp) *
-                  </label>
-                  <input 
-                    type="number"
-                    required
-                    min="1000"
-                    placeholder="Contoh: 3500000"
-                    value={invoiceForm.amount}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border-medium)',
-                      color: '#ffffff',
-                      fontSize: '0.85rem'
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    Tanggal Jatuh Tempo *
-                  </label>
-                  <input 
-                    type="date"
-                    required
-                    value={invoiceForm.due_date}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border-medium)',
-                      color: '#ffffff',
-                      fontSize: '0.85rem'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary"
-                  onClick={() => setIsCreateModalOpen(false)}
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-primary"
-                  disabled={isSubmittingInvoice}
-                >
-                  {isSubmittingInvoice ? 'Menerbitkan...' : 'Terbitkan Invoice'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <DunningCreateInvoiceModal 
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        formData={invoiceForm}
+        setFormData={setInvoiceForm}
+        onSubmit={handleCreateInvoiceSubmit}
+        isSubmitting={isSubmittingInvoice}
+      />
 
       {/* Modal Verifikasi Bukti Transfer m-Banking Menggunakan AI Vision (Anti-Struk Palsu) */}
-      {isVerifyModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1050,
-          padding: '16px'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%',
-            maxWidth: '560px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            padding: '24px',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-medium)',
-            borderRadius: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Scan size={20} color="var(--mint-neon)" />
-                <div>
-                  <h3 style={{ fontSize: '1.1rem', color: '#ffffff', margin: 0 }}>
-                    Verifikasi Bukti Transfer AI (Anti-Struk Palsu)
-                  </h3>
-                  <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-                    Opsi 3: Forensik Piksel ELA + Gemini Vision Mutasi Bank
-                  </span>
-                </div>
-              </div>
-              <button 
-                className="btn btn-sm btn-secondary"
-                onClick={() => setIsVerifyModalOpen(false)}
-                style={{ padding: '4px' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Target Invoice Card */}
-            {verifyTargetInvoice && (
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-                fontSize: '0.78rem'
-              }}>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>No Invoice:</span>
-                  <strong style={{ color: '#ffffff' }}>{verifyTargetInvoice.invoiceNumber}</strong>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Pelanggan:</span>
-                  <strong style={{ color: '#ffffff' }}>{maskCustomer(verifyTargetInvoice.customerName)}</strong>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Total Tagihan:</span>
-                  <strong className="mono" style={{ color: 'var(--emerald-400)', fontSize: '0.92rem' }}>
-                    {formatCurrency(verifyTargetInvoice.amount)}
-                  </strong>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.68rem' }}>Akun Tujuan SAK EMKM:</span>
-                  <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>1102 (Bank Giro/QRIS)</span>
-                </div>
-              </div>
-            )}
-
-            {/* Upload Area */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
-                Unggah Screenshot Bukti Transfer m-Banking (BCA / Mandiri / BRI / E-Wallet):
-              </label>
-              
-              <div style={{
-                border: '2px dashed var(--border-medium)',
-                borderRadius: '8px',
-                padding: '20px',
-                textAlign: 'center',
-                background: 'rgba(255, 255, 255, 0.02)',
-                cursor: 'pointer',
-                position: 'relative'
-              }}>
-                <input 
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleProofFileChange}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    opacity: 0,
-                    cursor: 'pointer',
-                    width: '100%',
-                    height: '100%'
-                  }}
-                />
-                {proofPreviewUrl ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                    <img 
-                      src={proofPreviewUrl} 
-                      alt="Preview Bukti Transfer" 
-                      style={{ maxHeight: '180px', borderRadius: '6px', objectFit: 'contain', border: '1px solid rgba(255,255,255,0.1)' }} 
-                    />
-                    <span style={{ fontSize: '0.74rem', color: 'var(--mint-neon)' }}>
-                      {selectedProofFile?.name} (Klik untuk ganti file)
-                    </span>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-                    <Upload size={32} color="var(--mint-neon)" />
-                    <span style={{ fontSize: '0.82rem', color: '#ffffff', fontWeight: 600 }}>
-                      Pilih atau Seret Gambar Bukti Transfer ke Sini
-                    </span>
-                    <span style={{ fontSize: '0.70rem' }}>
-                      Mendukung JPEG, PNG, WebP (Tangkapan Layar HP Asli)
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tombol Eksekusi AI Scan */}
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!selectedProofFile || isVerifyingProof}
-              onClick={handleExecuteProofVerification}
-              style={{
-                padding: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                background: 'linear-gradient(135deg, var(--mint-neon), var(--cyan-600))',
-                color: '#000000',
-                fontWeight: 800,
-                fontSize: '0.88rem'
-              }}
-            >
-              {isVerifyingProof ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>AI ELA Matrix & Gemini Vision Sedang Memindai...</span>
-                </>
-              ) : (
-                <>
-                  <Scan size={16} />
-                  <span>Jalankan Verifikasi Keaslian & Selesaikan Invoice</span>
-                </>
-              )}
-            </button>
-
-            {/* Hasil Analisis Forensik AI */}
-            {verificationResult && (
-              <div style={{
-                background: verificationResult.is_authentic 
-                  ? 'rgba(16, 185, 129, 0.1)' 
-                  : 'rgba(239, 68, 68, 0.12)',
-                border: `1px solid ${verificationResult.is_authentic ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.4)'}`,
-                borderRadius: '8px',
-                padding: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {verificationResult.is_authentic ? (
-                      <CheckCircle2 size={18} color="var(--emerald-400)" />
-                    ) : (
-                      <ShieldAlert size={18} color="var(--rose-400)" />
-                    )}
-                    <strong style={{ fontSize: '0.88rem', color: verificationResult.is_authentic ? 'var(--emerald-400)' : 'var(--rose-400)' }}>
-                      {verificationResult.is_authentic ? 'BUKTI TRANSFER TERVERIFIKASI SAH' : 'PERINGATAN: STRUK PALSU / MANIPULASI DITOLAK'}
-                    </strong>
-                  </div>
-                  <span className={`badge ${verificationResult.is_authentic ? 'badge-emerald' : 'badge-rose'}`}>
-                    ELA: {verificationResult.ela_integrity_score} / 100
-                  </span>
-                </div>
-
-                <p style={{ margin: 0, fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.4 }}>
-                  {verificationResult.message}
-                </p>
-
-                {verificationResult.tamper_details && (
-                  <div style={{ fontSize: '0.74rem', color: 'var(--rose-400)', background: 'rgba(0,0,0,0.3)', padding: '6px 8px', borderRadius: '4px' }}>
-                    Detail Anomali: {verificationResult.tamper_details}
-                  </div>
-                )}
-
-                {/* Rincian Entitas Terdeteksi */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', fontSize: '0.74rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Bank Terdeteksi: </span>
-                    <strong style={{ color: '#ffffff' }}>{verificationResult.bank_detected}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Pengirim: </span>
-                    <strong style={{ color: '#ffffff' }}>{verificationResult.sender_name}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Nominal Valid: </span>
-                    <strong className="mono" style={{ color: 'var(--emerald-400)' }}>{formatCurrency(verificationResult.amount_verified)}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Ref Transaksi: </span>
-                    <span className="mono" style={{ color: '#94a3b8' }}>{verificationResult.reference_number}</span>
-                  </div>
-                </div>
-
-                {verificationResult.journal_entry_number && (
-                  <div style={{ fontSize: '0.72rem', color: 'var(--mint-neon)', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '6px' }}>
-                    <span>Voucher Jurnal: {verificationResult.journal_entry_number}</span>
-                    <span className="mono">Merkle Hash: {verificationResult.audit_merkle_hash?.slice(0, 16)}...</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <DunningVerifyTransferModal 
+        isOpen={isVerifyModalOpen}
+        onClose={() => setIsVerifyModalOpen(false)}
+        targetInvoice={verifyTargetInvoice}
+        selectedProofFile={selectedProofFile}
+        proofPreviewUrl={proofPreviewUrl}
+        onProofFileChange={handleProofFileChange}
+        onVerify={handleExecuteProofVerification}
+        isVerifying={isVerifyingProof}
+        verificationResult={verificationResult}
+        isPiiMasked={isPiiMasked}
+      />
     </div>
   );
 };

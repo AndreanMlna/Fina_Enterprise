@@ -9,7 +9,6 @@ Compliance: SAK EMKM Double-Entry Balancing & UU PDP No. 27/2022
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -18,64 +17,18 @@ from app.api.v1.auth import get_current_user, require_role
 from app.domain.models import UserCredential, JournalEntry, JournalLine, Account, AccountCategory
 from app.domain.services import AccountingService
 from app.infrastructure.database import get_db
+from app.schemas.ledger import (
+    JournalLineSchema,
+    JournalEntrySchema,
+    AccountSchema,
+    FinancialLineItem,
+    SAKEMKMReportSchema,
+)
 
 router = APIRouter(prefix="/ledger", tags=["Ledger & Buku Besar SAK EMKM"])
 
 # RBAC Guard: Buku besar hanya dapat diakses oleh peran manajerial dan auditor
 _require_ledger_access = require_role(["OWNER", "MANAGER", "AUDITOR"])
-
-
-# --- Pydantic Response Schemas ---
-
-class JournalLineSchema(BaseModel):
-    id: str
-    account_id: str
-    account_code: Optional[str] = None
-    account_name: Optional[str] = None
-    debit: float
-    credit: float
-    memo: Optional[str] = None
-
-
-class JournalEntrySchema(BaseModel):
-    id: str
-    entry_number: str
-    entry_date: str
-    description: str
-    status: str
-    audit_merkle_hash: str
-    lines: List[JournalLineSchema] = []
-
-
-class AccountSchema(BaseModel):
-    id: str
-    code: str
-    name: str
-    category: str
-    normal_balance: str
-    balance: float
-
-
-class FinancialLineItem(BaseModel):
-    name: str
-    amount: float
-
-
-class SAKEMKMReportSchema(BaseModel):
-    period: str
-    total_assets: float
-    total_liabilities_and_equity: float
-    current_assets: List[FinancialLineItem]
-    non_current_assets: List[FinancialLineItem]
-    liabilities: List[FinancialLineItem]
-    equity: List[FinancialLineItem]
-    revenue: float
-    cogs: float
-    gross_profit: float
-    operational_expenses: List[FinancialLineItem]
-    net_income_before_tax: float
-    is_balanced: bool
-    audit_merkle_hash: str
 
 
 # --- Endpoints ---

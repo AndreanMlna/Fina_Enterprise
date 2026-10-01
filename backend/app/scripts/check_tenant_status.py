@@ -1,6 +1,9 @@
 """
 FINA-ENTERPRISE Database Verification Utility: Tenant Operational Status
 Memeriksa status konfigurasi saldo awal dan riwayat jurnal transaksi tenant di PostgreSQL.
+
+Cara menjalankan:
+    uv run python -m app.scripts.check_tenant_status
 """
 
 import asyncio
