@@ -65,6 +65,13 @@ D:\ATURSENDIRI\Agentic_AI\
 ├── AGENTS.md                              # Aturan & prinsip rekayasa baku sistem
 ├── GEMINI.md                              # Enterprise rules & Computer Science guidelines (SAK EMKM, UU PDP)
 ├── PROJECT_STRUCTURE.md                   # Dokumen blueprint arsitektur sistem (berkas ini)
+├── package.json                           # Root package.json untuk memicu build Vite web-app di Vercel CI
+├── vercel.json                            # Konfigurasi routing Vercel Serverless (FastAPI) & Static Vite
+├── requirements.txt                       # Dependensi Python level root untuk Vercel Serverless Function
+│
+├── api/                                   # Vercel Serverless Function Transport Layer
+│   ├── index.py                           # Python Serverless entrypoint wrapping FastAPI app
+│   └── requirements.txt                   # Manifest dependensi spesifik Serverless Function
 │
 ├── backend/                               # Layanan Backend FastAPI (Hexagonal / Clean Architecture)
 │   ├── app/

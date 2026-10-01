@@ -6,14 +6,26 @@ from app.core.config import settings
 class Base(DeclarativeBase):
     pass
 
-# Initialize Async Engine with Production Connection Pooling
+# Initialize Async Engine with Production & Serverless Connection Pooling
+connect_args: dict = {}
+if "ssl=require" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
+    connect_args["ssl"] = True
+
+import os
+
+# Serverless (Vercel) vs Persistent Container pool tuning (SRE Best Practice)
+is_vercel = bool(os.getenv("VERCEL"))
+pool_size = 2 if is_vercel else 10
+max_overflow = 3 if is_vercel else 20
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600
+    pool_size=pool_size,
+    max_overflow=max_overflow,
+    pool_pre_ping=True,      # Wajib untuk NeonDB: mendeteksi compute yang baru bangun dari status suspend
+    pool_recycle=300,        # 5 menit recycle: selaras dengan default window auto-suspend NeonDB
+    connect_args=connect_args
 )
 
 # Async Session Factory

@@ -7,20 +7,41 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database Settings (PostgreSQL 16/18 + pgvector)
+    # Direct Database URL (NeonDB Serverless PostgreSQL / Cloud Postgres)
+    RAW_DATABASE_URL: str | None = Field(default=None, alias="DATABASE_URL", description="Koneksi URI langsung dari NeonDB / Cloud Postgres")
+
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = Field(default="", description="Kata sandi PostgreSQL (disuplai melalui .env)")
     POSTGRES_DB: str = "fina_enterprise"
     
-    # Asynchronous Database Connection URL for asyncpg
+    # Asynchronous Database Connection URL for asyncpg (Neon Serverless & Local)
     @property
     def DATABASE_URL(self) -> str:
+        if self.RAW_DATABASE_URL:
+            url = self.RAW_DATABASE_URL.strip()
+            # Otomatis adaptasi skema driver asyncpg
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            # asyncpg mengharuskan parameter ssl=require (bukan sslmode=require dari libpq)
+            if "sslmode=require" in url:
+                url = url.replace("sslmode=require", "ssl=require")
+            return url
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Synchronous Database Connection URL for Alembic Migrations
     @property
     def SYNC_DATABASE_URL(self) -> str:
+        if self.RAW_DATABASE_URL:
+            url = self.RAW_DATABASE_URL.strip()
+            if url.startswith("postgresql+asyncpg://"):
+                url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+            elif url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql://", 1)
+            return url
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Security & Regulatory Settings (OWASP & RFC 8725 JWT Best Practices)
@@ -39,7 +60,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite", description="Model Gemini resmi (default: gemini-3.5-flash-lite, fallback: gemini-3.8-flash, gemini-3.6-flash)")
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env"),
+        env_file=("backend/.env", ".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )
