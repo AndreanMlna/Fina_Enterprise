@@ -75,10 +75,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_security_credentials(self) -> "Settings":
+        import os
         if not self.SECRET_KEY:
+            typo_key = os.getenv("SECRFT_KEY")
+            if typo_key:
+                self.SECRET_KEY = typo_key
+                return self
             raise ValueError(
                 "CRITICAL SECURITY: 'SECRET_KEY' belum dikonfigurasi! "
-                "Silakan setel nilai SECRET_KEY di berkas 'backend/.env' sebelum menjalankan aplikasi."
+                "Silakan setel nilai SECRET_KEY di berkas 'backend/.env' atau Vercel Environment Variables sebelum menjalankan aplikasi."
             )
         return self
 
