@@ -1,0 +1,7 @@
+[project]
+name = "fina-enterprise-backend"
+version = "2.4.0"
+requires-python = ">=3.11"
+
+[tool.vercel]
+entrypoint = "main:app"
