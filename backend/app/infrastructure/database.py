@@ -14,21 +14,29 @@ if "pooler" in settings.DATABASE_URL or "neon.tech" in settings.DATABASE_URL:
     connect_args["statement_cache_size"] = 0
 
 import os
+from sqlalchemy.pool import NullPool
 
 # Serverless (Vercel) vs Persistent Container pool tuning (SRE Best Practice)
 is_vercel = bool(os.getenv("VERCEL"))
-pool_size = 2 if is_vercel else 10
-max_overflow = 3 if is_vercel else 20
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_size=pool_size,
-    max_overflow=max_overflow,
-    pool_pre_ping=True,      # Wajib untuk NeonDB: mendeteksi compute yang baru bangun dari status suspend
-    pool_recycle=300,        # 5 menit recycle: selaras dengan default window auto-suspend NeonDB
-    connect_args=connect_args
-)
+if is_vercel:
+    # Pada runtime Serverless, NullPool mencegah koneksi tertahan antar-event loop yang berbeda
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        poolclass=NullPool,
+        connect_args=connect_args
+    )
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,      # Wajib untuk NeonDB: mendeteksi compute yang baru bangun dari status suspend
+        pool_recycle=300,        # 5 menit recycle: selaras dengan default window auto-suspend NeonDB
+        connect_args=connect_args
+    )
 
 # Async Session Factory
 AsyncSessionLocal = async_sessionmaker(
