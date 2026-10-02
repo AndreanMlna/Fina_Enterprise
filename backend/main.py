@@ -65,6 +65,18 @@ app.include_router(forensics_router, prefix=settings.API_V1_STR)
 app.include_router(setup_router, prefix=settings.API_V1_STR)
 
 
+@app.get("/", tags=["System Telemetry"])
+async def root_ping():
+    return {
+        "status": "ONLINE",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "health": "/health",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
 @app.get("/health", tags=["System Telemetry"])
 async def health_check():
     return {

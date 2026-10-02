@@ -14,7 +14,8 @@ export class HttpClient {
   constructor(baseUrl: string = '') {
     // Baca dari parameter, atau environment variable VITE_API_BASE_URL (misal di Vercel), fallback ke string kosong (relative proxy)
     const envBaseUrl = typeof import.meta !== 'undefined' && import.meta.env ? (import.meta.env.VITE_API_BASE_URL as string | undefined) : '';
-    this.baseUrl = baseUrl || (envBaseUrl ?? '');
+    const raw = baseUrl || (envBaseUrl ?? '');
+    this.baseUrl = raw.replace(/\/+$/, '');
   }
 
   getAuthToken(): string | null {
