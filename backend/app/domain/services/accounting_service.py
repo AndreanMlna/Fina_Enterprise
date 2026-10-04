@@ -298,11 +298,11 @@ class AccountingService:
         )
         result = await db.execute(stmt)
         return {
-            row.account_id: {
-                "debit": float(row.total_debit or 0),
-                "credit": float(row.total_credit or 0)
+            account_id: {
+                "debit": float(total_debit or 0),
+                "credit": float(total_credit or 0)
             }
-            for row in result
+            for account_id, total_debit, total_credit in result.all()
         }
 
     @classmethod
