@@ -11,6 +11,7 @@ interface StaffTableProps {
   onToggleMenu: (id: string) => void;
   onToggleStatus: (staff: StaffMember) => void;
   onDeleteStaff: (staff: StaffMember) => void;
+  onViewDetail?: (staff: StaffMember) => void;
   avatars: string[];
 }
 
@@ -22,6 +23,7 @@ export const StaffTable: React.FC<StaffTableProps> = ({
   onToggleMenu,
   onToggleStatus,
   onDeleteStaff,
+  onViewDetail,
   avatars
 }) => {
   const getRoleBadgeStyle = (role: string) => {
@@ -191,7 +193,8 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                       width: '6px',
                       height: '6px',
                       borderRadius: '50%',
-                      background: staff.is_active ? 'var(--mint-neon)' : '#F87171'
+                      background: staff.is_active ? 'var(--mint-neon)' : '#F87171',
+                      boxShadow: staff.is_active ? '0 0 8px var(--mint-neon)' : 'none'
                     }} />
                     {staff.is_active ? 'Active' : 'Inactive'}
                   </span>
@@ -202,8 +205,9 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                     <button 
                       className="homies-action-circle-btn"
-                      title="Lihat Detail Profil & SAK EMKM Log"
-                      onClick={() => alert(`Karyawan: ${staff.full_name}\nRole: ${staff.role}\nStatus: ${staff.is_active ? 'Aktif' : 'Nonaktif'}`)}
+                      title="Lihat Detail Profil & Hak Akses"
+                      onClick={() => onViewDetail ? onViewDetail(staff) : undefined}
+                      style={{ cursor: 'pointer' }}
                     >
                       <ArrowUpRight size={14} />
                     </button>

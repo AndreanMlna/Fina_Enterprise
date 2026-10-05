@@ -5,11 +5,13 @@ import {
   Calendar, 
   Share2, 
   CheckCircle2, 
-  AlertCircle
+  AlertCircle,
+  X,
+  Users
 } from 'lucide-react';
 import { api } from '../../services/api';
 import type { StaffMember, CreateStaffPayload, Tenant } from '../../types';
-import { StaffStatsCards, StaffTable, StaffModal } from '../staff';
+import { StaffStatsCards, StaffTable, StaffModal, StaffDetailModal } from '../staff';
 
 interface StaffManagementViewProps {
   isPiiMasked?: boolean;
@@ -26,14 +28,21 @@ const AVATARS = [
   'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=80&auto=format&fit=crop&q=60'
 ];
 
+type RoleFilterType = 'ALL' | 'OWNER' | 'MANAGER' | 'CASHIER' | 'AUDITOR';
+
 export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiMasked = false, tenant }) => {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<RoleFilterType>('ALL');
 
-  // Modal State
+  // Detail Modal State
+  const [selectedStaffDetail, setSelectedStaffDetail] = useState<StaffMember | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+
+  // Modal Tambah Karyawan State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formData, setFormData] = useState<CreateStaffPayload>({
@@ -116,6 +125,9 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
     try {
       const updated = await api.updateStaffStatus(staff.id, !staff.is_active);
       setStaffList(prev => prev.map(s => s.id === staff.id ? updated : s));
+      if (selectedStaffDetail?.id === staff.id) {
+        setSelectedStaffDetail(updated);
+      }
       setSuccessMsg(`Status '${staff.full_name}' diubah menjadi ${updated.is_active ? 'AKTIF' : 'NONAKTIF'}.`);
       setActiveMenuStaffId(null);
       setTimeout(() => setSuccessMsg(null), 4000);
@@ -136,6 +148,10 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
     try {
       await api.deleteStaff(staff.id);
       setStaffList(prev => prev.filter(s => s.id !== staff.id));
+      if (selectedStaffDetail?.id === staff.id) {
+        setIsDetailModalOpen(false);
+        setSelectedStaffDetail(null);
+      }
       setSuccessMsg(`Karyawan '${staff.full_name}' berhasil dihapus.`);
       setActiveMenuStaffId(null);
       setTimeout(() => setSuccessMsg(null), 4000);
@@ -144,16 +160,34 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
     }
   };
 
-  // Filter pencarian staf
+  // Hitung jumlah staf per role
+  const roleCounts = useMemo(() => {
+    return {
+      ALL: staffList.length,
+      OWNER: staffList.filter(s => s.role === 'OWNER').length,
+      MANAGER: staffList.filter(s => s.role === 'MANAGER').length,
+      CASHIER: staffList.filter(s => s.role === 'CASHIER').length,
+      AUDITOR: staffList.filter(s => s.role === 'AUDITOR').length,
+    };
+  }, [staffList]);
+
+  // Filter pencarian staf & role tabs
   const filteredStaff = useMemo(() => {
-    if (!searchTerm.trim()) return staffList;
-    const q = searchTerm.toLowerCase();
-    return staffList.filter(s => 
-      s.full_name.toLowerCase().includes(q) ||
-      s.role.toLowerCase().includes(q) ||
-      s.phone_number.includes(q)
-    );
-  }, [staffList, searchTerm]);
+    return staffList.filter(s => {
+      // 1. Role filter
+      if (selectedRoleFilter !== 'ALL' && s.role !== selectedRoleFilter) {
+        return false;
+      }
+      // 2. Search query filter
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        s.full_name.toLowerCase().includes(q) ||
+        s.role.toLowerCase().includes(q) ||
+        s.phone_number.includes(q)
+      );
+    });
+  }, [staffList, searchTerm, selectedRoleFilter]);
 
   // Statistik Metrik untuk Top Stat Cards
   const totalStaff = staffList.length;
@@ -161,13 +195,21 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
   const departmentsCount = new Set(staffList.map(s => s.role)).size;
   const attendanceRate = totalStaff > 0 ? Math.round((activeStaff / totalStaff) * 98) : 98;
 
+  const ROLE_TABS = [
+    { id: 'ALL', label: 'Semua Karyawan', count: roleCounts.ALL },
+    { id: 'OWNER', label: 'Owner', count: roleCounts.OWNER },
+    { id: 'MANAGER', label: 'Manager', count: roleCounts.MANAGER },
+    { id: 'CASHIER', label: 'Kasir POS', count: roleCounts.CASHIER },
+    { id: 'AUDITOR', label: 'Auditor SAK', count: roleCounts.AUDITOR }
+  ] as const;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', maxWidth: '1440px', margin: '0 auto' }}>
       
       {/* 1. TOP BREADCRUMB & ACTION BUTTONS */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}>
-          <span style={{ color: 'var(--mint-neon)', fontWeight: 600 }}>Home</span>
+          <span style={{ color: 'var(--emerald-400)', fontWeight: 600 }}>Home</span>
           <span style={{ color: 'rgba(255, 255, 255, 0.25)' }}>/</span>
           <span style={{ color: '#94a3b8' }}>Employees</span>
         </div>
@@ -192,24 +234,24 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
           margin: '0 0 4px 0',
           fontFamily: 'var(--font-display)'
         }}>
-          Employees
+          Employees & Workforce
         </h1>
         <p style={{ color: '#94a3b8', fontSize: '0.90rem', margin: 0 }}>
-          Manage all company employees, credentials, and workforce data for {tenant?.name || 'PT Abadi Nan Jaya'}.
+          Manajemen kredensial tim, hak akses kasir POS, dan verifikasi audit SAK EMKM untuk {tenant?.name || 'Unit Usaha'}.
         </p>
       </div>
 
       {/* Notifikasi Feedback */}
       {successMsg && (
         <div style={{
-          background: 'rgba(0, 223, 143, 0.12)',
-          border: '1px solid rgba(0, 223, 143, 0.35)',
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid rgba(16, 185, 129, 0.35)',
           borderRadius: '12px',
           padding: '12px 18px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          color: 'var(--mint-neon)',
+          color: 'var(--emerald-400)',
           fontSize: '0.86rem',
           fontWeight: 500
         }}>
@@ -235,7 +277,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
         </div>
       )}
 
-      {/* 3. TOP STAT PILLS ROW */}
+      {/* 3. TOP STAT CARDS ROW */}
       <StaffStatsCards 
         totalStaff={totalStaff}
         activeStaff={activeStaff}
@@ -246,57 +288,149 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
       {/* 4. MAIN EMPLOYEES PANEL & TABLE */}
       <div className="homies-card" style={{ padding: 0, overflow: 'hidden' }}>
         
-        {/* Table Toolbar */}
+        {/* Table Toolbar: Filter Chips + Search + Action */}
         <div style={{
-          padding: '18px 20px',
+          padding: '16px 20px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px'
+          flexDirection: 'column',
+          gap: '14px'
         }}>
-          {/* Search Box */}
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '320px'
-          }}>
-            <Search 
-              size={16} 
-              color="#64748b" 
-              style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} 
-            />
-            <input 
-              type="text"
-              placeholder="Search by name, role, phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="homies-input"
-              style={{ paddingLeft: '36px', height: '38px', fontSize: '0.82rem' }}
-            />
+          {/* Top Row of Toolbar: Interactive Role Filter Tabs */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {ROLE_TABS.map(tab => {
+                const isSelected = selectedRoleFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setSelectedRoleFilter(tab.id as RoleFilterType)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      border: isSelected ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                      color: isSelected ? 'var(--emerald-400)' : '#94a3b8',
+                      fontSize: '0.78rem',
+                      fontWeight: isSelected ? 700 : 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.18s ease'
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: isSelected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.06)',
+                      color: isSelected ? '#ffffff' : '#64748b',
+                      fontWeight: 700
+                    }}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Quick Match Indicator */}
+            <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Users size={13} color="var(--emerald-400)" />
+              <span>{filteredStaff.length} dari {staffList.length} karyawan tampil</span>
+            </div>
           </div>
 
-          {/* Action Right: Filter & Add Employee Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button 
-              className="btn btn-primary btn-sm"
-              onClick={() => setIsModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontWeight: 600,
-                fontSize: '0.82rem',
-                background: 'var(--mint-neon)',
-                color: '#000000'
-              }}
-            >
-              <UserPlus size={15} />
-              <span>+ Add Employee</span>
-            </button>
+          {/* Bottom Row of Toolbar: Search Box & Add Employee Button */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            {/* Search Box with dark glass design and clear button */}
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '360px'
+            }}>
+              <Search 
+                size={16} 
+                color="var(--emerald-400)" 
+                style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.8 }} 
+              />
+              <input 
+                type="text"
+                placeholder="Cari nama, role, no. WhatsApp..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="homies-input"
+                style={{ 
+                  paddingLeft: '36px', 
+                  paddingRight: searchTerm ? '32px' : '12px',
+                  height: '40px', 
+                  fontSize: '0.84rem' 
+                }}
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Hapus pencarian"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Action Right: Luxury Gradient Add Employee Button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  borderRadius: '10px',
+                  padding: '9px 18px',
+                  fontWeight: 700,
+                  fontSize: '0.84rem',
+                  background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
+                  color: '#021a10',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.45)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.3)';
+                }}
+              >
+                <UserPlus size={16} strokeWidth={2.3} />
+                <span>+ Tambah Karyawan</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -309,6 +443,10 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
           onToggleMenu={(id) => setActiveMenuStaffId(activeMenuStaffId === id ? null : id)}
           onToggleStatus={handleToggleStatus}
           onDeleteStaff={handleDeleteStaff}
+          onViewDetail={(staff) => {
+            setSelectedStaffDetail(staff);
+            setIsDetailModalOpen(true);
+          }}
           avatars={AVATARS}
         />
       </div>
@@ -322,6 +460,18 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({ isPiiM
         onSubmit={handleCreateStaff}
         isSubmitting={isSubmitting}
         formError={formError}
+      />
+
+      {/* Modal Detail Profil & Otoritas Karyawan */}
+      <StaffDetailModal 
+        staff={selectedStaffDetail}
+        isOpen={isDetailModalOpen}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+          setSelectedStaffDetail(null);
+        }}
+        isPiiMasked={isPiiMasked}
+        onToggleStatus={handleToggleStatus}
       />
     </div>
   );

@@ -151,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="glass-panel" style={{
-      margin: '12px 20px 14px 20px',
+      margin: '10px 20px 8px 20px',
       padding: '10px 20px',
       display: 'flex',
       alignItems: 'center',
@@ -159,7 +159,10 @@ export const Header: React.FC<HeaderProps> = ({
       flexWrap: 'nowrap',
       gap: '16px',
       minWidth: 0,
-      position: 'relative'
+      position: 'relative',
+      background: 'rgba(11, 17, 24, 0.96)',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.45)'
     }}>
       {/* Brand & Identity + Tenant Branch Selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, minWidth: 0 }}>

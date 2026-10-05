@@ -69,6 +69,12 @@
   padding: 0;
 }
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-base);
@@ -82,7 +88,6 @@ body {
     radial-gradient(circle at 85% 20%, rgba(6, 182, 212, 0.06) 0%, transparent 35%),
     radial-gradient(circle at 50% 80%, rgba(99, 102, 241, 0.05) 0%, transparent 50%);
   background-attachment: fixed;
-  min-height: 100vh;
 }
 
 /* Custom Scrollbar */
@@ -1017,6 +1022,61 @@ select option {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.85; transform: scale(1.12); }
 }
+
+/* Universal Homies Input Styling */
+.homies-input {
+  width: 100%;
+  background-color: rgba(15, 23, 42, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 10px !important;
+  color: #FFFFFF !important;
+  font-size: 0.82rem !important;
+  padding: 8px 12px !important;
+  outline: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-sizing: border-box;
+}
+
+.homies-input::placeholder {
+  color: #64748B !important;
+}
+
+.homies-input:hover {
+  background-color: rgba(22, 32, 50, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.homies-input:focus {
+  background-color: rgba(22, 32, 50, 0.95) !important;
+  border-color: rgba(0, 223, 143, 0.6) !important;
+  box-shadow: 0 0 14px rgba(0, 223, 143, 0.18) !important;
+}
+
+/* Custom Sleek Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 223, 143, 0.25) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--mint-neon);
+}
+
 
 
 

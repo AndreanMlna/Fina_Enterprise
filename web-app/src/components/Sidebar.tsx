@@ -164,6 +164,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
       <aside style={{
         width: '62px',
         minWidth: '62px',
+        height: '100%',
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -178,7 +180,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
           flexDirection: 'column',
           alignItems: 'center',
           gap: '6px',
-          width: '100%'
+          width: '100%',
+          height: '100%',
+          minHeight: 0,
+          overflow: 'hidden'
         }}>
           {/* Toggle button */}
           <button
@@ -194,6 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: '4px',
+              flexShrink: 0,
               transition: 'color 0.15s ease'
             }}
             title="Expand sidebar"
@@ -201,67 +207,96 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
             <PanelLeftOpen size={16} />
           </button>
 
-          {/* Icon-only nav tiles */}
-          {visibleTiles.map((tile) => {
-            const Icon = tile.icon;
-            const isActive = activeTab === tile.id;
-            return (
-              <button
-                key={tile.id}
-                onClick={() => onSelectTab(tile.id)}
-                title={tile.label}
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  border: isActive ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid transparent',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.15) 100%)'
-                    : 'rgba(255, 255, 255, 0.03)',
-                  color: isActive ? '#34d399' : '#94a3b8',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease',
-                  boxShadow: isActive ? '0 2px 10px rgba(16, 185, 129, 0.18)' : 'none'
-                }}
-              >
-                <Icon size={17} />
-              </button>
-            );
-          })}
+          {/* Scrollable Icon List */}
+          <div className="custom-scrollbar" style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '6px',
+            width: '100%',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto'
+          }}>
+            {/* Icon-only nav tiles */}
+            {visibleTiles.map((tile) => {
+              const Icon = tile.icon;
+              const isActive = activeTab === tile.id;
+              return (
+                <button
+                  key={tile.id}
+                  onClick={() => onSelectTab(tile.id)}
+                  title={tile.label}
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    border: isActive ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid transparent',
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.15) 100%)'
+                      : 'rgba(255, 255, 255, 0.03)',
+                    color: isActive ? '#34d399' : '#94a3b8',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.15s ease',
+                    boxShadow: isActive ? '0 2px 10px rgba(16, 185, 129, 0.18)' : 'none'
+                  }}
+                >
+                  <Icon size={17} />
+                </button>
+              );
+            })}
 
-          {/* Divider */}
-          <div style={{ width: '24px', height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '4px 0' }} />
+            {/* Divider */}
+            <div style={{ width: '24px', height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '4px 0', flexShrink: 0 }} />
 
-          {/* Favorite + Other icons */}
-          {[...visibleFavorites, ...visibleOthers].map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onSelectTab(item.id)}
-                title={item.label}
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: isActive ? 'rgba(0, 223, 143, 0.15)' : 'transparent',
-                  color: isActive ? 'var(--mint-neon)' : '#64748B',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Icon size={15} />
-              </button>
-            );
-          })}
+            {/* Favorite + Other icons */}
+            {[...visibleFavorites, ...visibleOthers].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectTab(item.id)}
+                  title={item.label}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isActive ? 'rgba(0, 223, 143, 0.15)' : 'transparent',
+                    color: isActive ? 'var(--mint-neon)' : '#64748B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Icon size={15} />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* User Mini Profile Avatar (Pinned Bottom) */}
+          <div style={{ marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', flexShrink: 0 }}>
+            <img 
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=60"
+              alt="Owner"
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                objectFit: 'cover'
+              }}
+              title={tenant?.name || 'Owner FINA'}
+            />
+          </div>
         </div>
       </aside>
     );
@@ -272,18 +307,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
     <aside style={{
       width: '260px',
       minWidth: '260px',
+      height: '100%',
+      minHeight: 0,
       display: 'flex',
       flexDirection: 'column',
-      gap: '16px',
-      padding: '8px 0 20px 20px',
+      gap: '8px',
+      padding: '8px 0 12px 20px',
       flexShrink: 0,
       transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
     }}>
       {/* Container Sidebar Homies Card */}
-      <div className="homies-card" style={{ padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="homies-card" style={{
+        padding: '14px 12px 10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden'
+      }}>
         
-        {/* Logo Brand + Collapse Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px' }}>
+        {/* Zone 1: Logo Brand + Collapse Toggle (Pinned Top) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px', flexShrink: 0, marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
               width: '28px',
@@ -330,222 +374,238 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
           )}
         </div>
 
-        {/* Search Input: Q Search here.. */}
-        <div style={{
+        {/* Zone 2: Middle Scrollable Container (with .custom-scrollbar) */}
+        <div className="custom-scrollbar" style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.07)',
-          borderRadius: '10px',
-          padding: '7px 12px'
+          flexDirection: 'column',
+          gap: '12px',
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          paddingRight: '4px'
         }}>
-          <Search size={14} color="#64748B" />
-          <input
-            type="text"
-            value={navSearch}
-            onChange={(e) => setNavSearch(e.target.value)}
-            placeholder="Search here.."
-            style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: '#FFFFFF',
-              fontSize: '0.78rem',
-              width: '100%'
-            }}
-          />
-        </div>
-        
-        {/* Banner Navigasi Khusus Owner: Onboarding (jika baru) vs Monitoring Usaha (jika sudah berjalan) */}
-        {userRole === 'OWNER' && (
-          <div 
-            onClick={() => onSelectTab('initial_setup')}
-            style={{
-              padding: '10px 12px',
-              borderRadius: '10px',
-              background: activeTab === 'initial_setup'
-                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.16) 100%)'
-                : tenant?.isSetupComplete
-                  ? 'rgba(255, 255, 255, 0.03)'
-                  : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)',
-              border: activeTab === 'initial_setup'
-                ? '1px solid rgba(0, 223, 143, 0.5)'
-                : tenant?.isSetupComplete
-                  ? '1px solid rgba(255, 255, 255, 0.08)'
-                  : '1px solid rgba(16, 185, 129, 0.3)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: activeTab === 'initial_setup' ? '0 2px 10px rgba(0, 223, 143, 0.15)' : 'none',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              background: tenant?.isSetupComplete ? 'rgba(56, 189, 248, 0.16)' : 'rgba(0, 223, 143, 0.20)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              {tenant?.isSetupComplete ? (
-                <ShieldCheck size={16} color="#38BDF8" />
-              ) : (
-                <Rocket size={15} color="var(--mint-neon)" />
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#FFFFFF' }}>
-                {tenant?.isSetupComplete ? 'Monitoring Usaha' : 'Setup Saldo Awal'}
-              </span>
-              <span style={{ fontSize: '0.66rem', color: tenant?.isSetupComplete ? '#38BDF8' : '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                {tenant?.isSetupComplete ? 'Evaluasi modal & eksekusi ➔' : 'Input kas, stok & aset awal ➔'}
-              </span>
-            </div>
+          {/* Search Input: Q Search here.. */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.07)',
+            borderRadius: '10px',
+            padding: '7px 12px',
+            flexShrink: 0
+          }}>
+            <Search size={14} color="#64748B" />
+            <input
+              type="text"
+              value={navSearch}
+              onChange={(e) => setNavSearch(e.target.value)}
+              placeholder="Search here.."
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#FFFFFF',
+                fontSize: '0.78rem',
+                width: '100%'
+              }}
+            />
           </div>
-        )}
-
-        {/* 2-Column Squircle Navigation Grid Tiles (6 Modul Utama) */}
-        <div className="homies-nav-grid">
-          {visibleTiles.map((tile) => {
-            const Icon = tile.icon;
-            const isActive = activeTab === tile.id;
-            return (
-              <button
-                key={tile.id}
-                onClick={() => onSelectTab(tile.id)}
-                className={`homies-nav-tile ${isActive ? 'active' : ''}`}
-                style={{ border: 'none' }}
-              >
-                <Icon size={18} />
-                <span style={{ fontSize: '0.74rem', fontWeight: 600, color: isActive ? '#0B1118' : '#94A3B8' }}>
-                  {tile.label}
+          
+          {/* Banner Navigasi Khusus Owner: Onboarding vs Monitoring Usaha */}
+          {userRole === 'OWNER' && (
+            <div 
+              onClick={() => onSelectTab('initial_setup')}
+              style={{
+                padding: '10px 12px',
+                borderRadius: '10px',
+                background: activeTab === 'initial_setup'
+                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.16) 100%)'
+                  : tenant?.isSetupComplete
+                    ? 'rgba(255, 255, 255, 0.03)'
+                    : 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)',
+                border: activeTab === 'initial_setup'
+                  ? '1px solid rgba(0, 223, 143, 0.5)'
+                  : tenant?.isSetupComplete
+                    ? '1px solid rgba(255, 255, 255, 0.08)'
+                    : '1px solid rgba(16, 185, 129, 0.3)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: activeTab === 'initial_setup' ? '0 2px 10px rgba(0, 223, 143, 0.15)' : 'none',
+                transition: 'all 0.2s ease',
+                flexShrink: 0
+              }}
+            >
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                background: tenant?.isSetupComplete ? 'rgba(56, 189, 248, 0.16)' : 'rgba(0, 223, 143, 0.20)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                {tenant?.isSetupComplete ? (
+                  <ShieldCheck size={16} color="#38BDF8" />
+                ) : (
+                  <Rocket size={15} color="var(--mint-neon)" />
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#FFFFFF' }}>
+                  {tenant?.isSetupComplete ? 'Monitoring Usaha' : 'Setup Saldo Awal'}
                 </span>
-              </button>
-            );
-          })}
+                <span style={{ fontSize: '0.66rem', color: tenant?.isSetupComplete ? '#38BDF8' : '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                  {tenant?.isSetupComplete ? 'Evaluasi modal & eksekusi ➔' : 'Input kas, stok & aset awal ➔'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 2-Column Squircle Navigation Grid Tiles (6 Modul Utama) */}
+          <div className="homies-nav-grid" style={{ flexShrink: 0 }}>
+            {visibleTiles.map((tile) => {
+              const Icon = tile.icon;
+              const isActive = activeTab === tile.id;
+              return (
+                <button
+                  key={tile.id}
+                  onClick={() => onSelectTab(tile.id)}
+                  className={`homies-nav-tile ${isActive ? 'active' : ''}`}
+                  style={{ border: 'none' }}
+                >
+                  <Icon size={18} />
+                  <span style={{ fontSize: '0.74rem', fontWeight: 600, color: isActive ? '#0B1118' : '#94A3B8' }}>
+                    {tile.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Section: Favorite */}
+          {visibleFavorites.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px', flexShrink: 0 }}>
+              <div 
+                onClick={() => setFavOpen(!favOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '2px 4px'
+                }}
+              >
+                <ChevronDown size={13} style={{ transform: favOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
+                <span>Favorite</span>
+              </div>
+
+              {favOpen && visibleFavorites.map((fav) => {
+                const Icon = fav.icon;
+                const isActive = activeTab === fav.id;
+                return (
+                  <button
+                    key={fav.id}
+                    onClick={() => onSelectTab(fav.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      background: isActive ? 'rgba(0, 223, 143, 0.12)' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      width: '100%',
+                      textAlign: 'left',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Icon size={14} color={isActive ? 'var(--mint-neon)' : '#64748B'} />
+                    <span style={{
+                      fontSize: '0.76rem',
+                      color: isActive ? 'var(--mint-neon)' : '#cbd5e1',
+                      fontWeight: isActive ? 600 : 500
+                    }}>
+                      {fav.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Section: Modul Lainnya / Marketing */}
+          {visibleOthers.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px', flexShrink: 0 }}>
+              <div 
+                onClick={() => setOtherOpen(!otherOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '2px 4px'
+                }}
+              >
+                <ChevronDown size={13} style={{ transform: otherOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
+                <span>Modul Lainnya</span>
+              </div>
+
+              {otherOpen && visibleOthers.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectTab(item.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      background: isActive ? 'rgba(0, 223, 143, 0.12)' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      width: '100%',
+                      textAlign: 'left',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Icon size={14} color={isActive ? 'var(--mint-neon)' : '#64748B'} />
+                    <span style={{
+                      fontSize: '0.76rem',
+                      color: isActive ? 'var(--mint-neon)' : '#cbd5e1',
+                      fontWeight: isActive ? 600 : 500
+                    }}>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Section: Favorite */}
-        {visibleFavorites.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px' }}>
-            <div 
-              onClick={() => setFavOpen(!favOpen)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                color: '#94a3b8',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              <ChevronDown size={13} style={{ transform: favOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
-              <span>Favorite</span>
-            </div>
-
-            {favOpen && visibleFavorites.map((fav) => {
-              const Icon = fav.icon;
-              const isActive = activeTab === fav.id;
-              return (
-                <button
-                  key={fav.id}
-                  onClick={() => onSelectTab(fav.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '6px 8px',
-                    borderRadius: '8px',
-                    background: isActive ? 'rgba(0, 223, 143, 0.12)' : 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    width: '100%',
-                    textAlign: 'left'
-                  }}
-                >
-                  <Icon size={14} color={isActive ? 'var(--mint-neon)' : '#64748B'} />
-                  <span style={{
-                    fontSize: '0.76rem',
-                    color: isActive ? 'var(--mint-neon)' : '#cbd5e1',
-                    fontWeight: isActive ? 600 : 500
-                  }}>
-                    {fav.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Section: Modul Lainnya / Marketing */}
-        {visibleOthers.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px' }}>
-            <div 
-              onClick={() => setOtherOpen(!otherOpen)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                color: '#94a3b8',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              <ChevronDown size={13} style={{ transform: otherOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
-              <span>Modul Lainnya</span>
-            </div>
-
-            {otherOpen && visibleOthers.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectTab(item.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '6px 8px',
-                    borderRadius: '8px',
-                    background: isActive ? 'rgba(0, 223, 143, 0.12)' : 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    width: '100%',
-                    textAlign: 'left'
-                  }}
-                >
-                  <Icon size={14} color={isActive ? 'var(--mint-neon)' : '#64748B'} />
-                  <span style={{
-                    fontSize: '0.76rem',
-                    color: isActive ? 'var(--mint-neon)' : '#cbd5e1',
-                    fontWeight: isActive ? 600 : 500
-                  }}>
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* User Mini Profile di Bawah Sidebar (Sesuai Referensi) */}
+        {/* Zone 3: Pinned Bottom - User Mini Profile */}
         <div style={{
           marginTop: 'auto',
           paddingTop: '10px',
           borderTop: '1px solid rgba(255, 255, 255, 0.06)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between'
+          justifyContent: 'space-between',
+          flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <img 
@@ -571,8 +631,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, userRo
 
       </div>
 
-      {/* Compliance Badge */}
-      <div className="homies-card-inner" style={{ padding: '10px 14px', border: '1px solid rgba(0, 223, 143, 0.15)' }}>
+      {/* Compliance Badge - Pinned at bottom of aside */}
+      <div className="homies-card-inner" style={{ padding: '8px 12px', border: '1px solid rgba(0, 223, 143, 0.15)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <CheckCircle2 size={13} color="var(--mint-neon)" />
           <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#cbd5e1' }}>

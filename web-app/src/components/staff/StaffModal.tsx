@@ -163,16 +163,24 @@ export const StaffModal: React.FC<StaffModalProps> = ({
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="btn btn-primary btn-sm"
               style={{ 
-                borderRadius: '8px', 
-                padding: '10px 20px',
-                background: 'var(--mint-neon)',
-                color: '#000000',
-                fontWeight: 700
+                borderRadius: '10px', 
+                padding: '10px 22px',
+                background: isSubmitting ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
+                color: isSubmitting ? '#94a3b8' : '#021a10',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                boxShadow: isSubmitting ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.3)',
+                transition: 'all 0.2s ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
               }}
             >
-              {isSubmitting ? 'Menyimpan...' : 'Daftarkan Karyawan'}
+              <UserPlus size={16} />
+              <span>{isSubmitting ? 'Menyimpan...' : 'Daftarkan Karyawan'}</span>
             </button>
           </div>
         </form>

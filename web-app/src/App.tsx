@@ -400,9 +400,9 @@ export const App: React.FC = () => {
 
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Top Enterprise Application Header — Stable Solid Enterprise Navigation */}
-      <div style={{ flexShrink: 0, zIndex: 100 }}>
+    <div style={{ height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top Enterprise Application Header — Sticky Pinned Enterprise Navigation */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: 'var(--bg-base)', flexShrink: 0, width: '100%' }}>
         <Header 
           kpi={kpi} 
           tenant={currentTenant}
