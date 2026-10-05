@@ -355,6 +355,7 @@ export interface RestockInventoryPayload {
   quantity_added: number;
   unit: string;
   purchase_price_per_unit: number;
+  payment_method?: 'CASH' | 'BANK';
   supplier_name?: string;
   notes?: string;
 }
@@ -362,6 +363,9 @@ export interface RestockInventoryPayload {
 export interface RestockInventoryResponse {
   success: boolean;
   message: string;
+  cash_deducted?: number;
+  payment_method?: 'CASH' | 'BANK';
+  journal_entry_number?: string;
   material: {
     id: string;
     name: string;
@@ -394,6 +398,7 @@ export interface ProductionBatchPayload {
   product_id: string;
   quantity_produced: number;
   overhead_cost?: number;
+  payment_method?: 'CASH' | 'BANK';
   notes?: string;
 }
 
@@ -405,6 +410,10 @@ export interface ProductionBatchResponse {
   new_finished_stock: number;
   unit_cost_hpp: number;
   current_selling_price: number;
+  overhead_cost?: number;
+  overhead_cash_deducted?: number;
+  payment_method?: 'CASH' | 'BANK';
+  overhead_journal_number?: string;
   margin_status: string;
   margin_label: string;
   is_at_loss: boolean;

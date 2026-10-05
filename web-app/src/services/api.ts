@@ -68,6 +68,7 @@ class ApiService {
   restockInventory = posService.restockInventory.bind(posService);
   recordProductionBatch = posService.recordProductionBatch.bind(posService);
   getMarginLeakageAlerts = posService.getMarginLeakageAlerts.bind(posService);
+  getInventoryMaterials = posService.getInventoryMaterials.bind(posService);
 
   // --- Domain: Intelijen Harga B2B & Komoditas ---
   getCommodityBenchmarks = operationsService.getCommodityBenchmarks.bind(operationsService);

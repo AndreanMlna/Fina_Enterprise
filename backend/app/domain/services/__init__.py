@@ -26,7 +26,8 @@ from app.domain.services.pos_service import (
     POSService,
     pos_service,
     PP55_FINAL_TAX_RATE,
-    NON_SALEABLE_CATEGORIES
+    NON_SALEABLE_CATEGORIES,
+    NON_SALEABLE_KEYWORD_PATTERNS
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "pos_service",
     "PP55_FINAL_TAX_RATE",
     "NON_SALEABLE_CATEGORIES",
+    "NON_SALEABLE_KEYWORD_PATTERNS",
     "COA_CASH_ON_HAND",
     "COA_BANK_GIRO_QRIS",
     "COA_ACCOUNTS_RECEIVABLE",

@@ -19,6 +19,8 @@ interface POSProductionBatchTabProps {
   setBatchQuantity: (val: number) => void;
   batchOverheadCost: number;
   setBatchOverheadCost: (val: number) => void;
+  paymentMethod?: 'CASH' | 'BANK';
+  setPaymentMethod?: (val: 'CASH' | 'BANK') => void;
   batchNotes: string;
   setBatchNotes: (val: string) => void;
   isLoadingRecipe: boolean;
@@ -53,6 +55,8 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
   setBatchQuantity,
   batchOverheadCost,
   setBatchOverheadCost,
+  paymentMethod = 'CASH',
+  setPaymentMethod,
   batchNotes,
   setBatchNotes,
   isLoadingRecipe,
@@ -84,6 +88,25 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
           <span>{productionError}</span>
         </div>
       )}
+
+      {/* Penjelasan Tahap 2: Pengolahan Bahan Baku */}
+      <div
+        style={{
+          padding: '12px 16px',
+          borderRadius: '10px',
+          background: 'rgba(6, 182, 212, 0.12)',
+          border: '1px solid rgba(6, 182, 212, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}
+      >
+        <Layers size={20} color="var(--cyan-400)" />
+        <div style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
+          <strong style={{ color: '#ffffff' }}>Tahap 2: Pengolahan Bahan Baku menjadi Produk Jadi Siap Jual.</strong><br/>
+          Pilih menu produk jadi (misal: Nasi Goreng, Ayam Geprek). Sistem akan mengonversi dan memotong bahan baku sesuai resep BOM, lalu otomatis menambahkan produk matang ke Katalog Kasir POS.
+        </div>
+      </div>
 
       <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
@@ -138,7 +161,7 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
               min="0"
               value={batchOverheadCost}
               onChange={(e) => setBatchOverheadCost(parseFloat(e.target.value) || 0)}
-              placeholder="Gas, listrik, tenaga harian..."
+              placeholder="Gas LPG, listrik, tenaga harian..."
               style={{
                 width: '100%',
                 padding: '10px 14px',
@@ -149,6 +172,22 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
                 fontSize: '0.88rem'
               }}
             />
+          </div>
+
+          {/* Sumber Kas Overhead */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
+              Sumber Kas Biaya Overhead
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod && setPaymentMethod(e.target.value as 'CASH' | 'BANK')}
+              className="homies-select"
+              style={{ width: '100%', padding: '10px 12px' }}
+            >
+              <option value="CASH">Kas Tunai di Tangan (Akun 1101)</option>
+              <option value="BANK">Rekening Bank Operasional (Akun 1102)</option>
+            </select>
           </div>
         </div>
 
@@ -329,6 +368,11 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
                 <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
                   +{productionResult.quantity_produced} unit ditambahkan ke katalog kasir. Stok baru: {productionResult.new_finished_stock} unit.
                 </div>
+                {productionResult.overhead_cash_deducted !== undefined && productionResult.overhead_cash_deducted > 0 && (
+                  <div style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.74rem' }}>
+                    <span>💸 Biaya Overhead Terpotong: <strong>-{formatCurrency(productionResult.overhead_cash_deducted)}</strong> ({productionResult.payment_method === 'BANK' ? 'Bank 1102' : 'Kas Tunai 1101'}) • No Jurnal SAK EMKM: <code className="mono">{productionResult.overhead_journal_number || 'JV-OVD'}</code></span>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -31,6 +31,7 @@ from app.domain.services import (
     pos_service,
     PP55_FINAL_TAX_RATE,
     NON_SALEABLE_CATEGORIES,
+    NON_SALEABLE_KEYWORD_PATTERNS,
 )
 from app.domain.services.ai_service import ai_service
 from app.infrastructure.database import get_db
@@ -82,7 +83,8 @@ async def list_pos_products(
     current_user: UserCredential = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     category: Optional[str] = Query(None, description="Filter berdasarkan kategori produk"),
-    search: Optional[str] = Query(None, description="Pencarian nama produk atau SKU")
+    search: Optional[str] = Query(None, description="Pencarian nama produk atau SKU"),
+    item_type: Optional[str] = Query("saleable", description="Tipe item: 'saleable' (produk siap jual kasir), 'materials' (bahan baku/alat), 'all' (semua)")
 ):
     """
     Mengambil katalog produk siap jual untuk kasir LANGSUNG DARI TABEL 'products' PostgreSQL.
@@ -92,10 +94,12 @@ async def list_pos_products(
     """
     await pos_service.ensure_saleable_pos_catalog(db, current_user.tenant_id, NON_SALEABLE_CATEGORIES)
 
-    stmt = select(Product).where(
-        Product.tenant_id == current_user.tenant_id,
-        ~func.lower(Product.category).in_(NON_SALEABLE_CATEGORIES)
-    )
+    stmt = select(Product).where(Product.tenant_id == current_user.tenant_id)
+
+    if item_type == "saleable":
+        stmt = stmt.where(pos_service.get_saleable_filter(Product.category))
+    elif item_type == "materials":
+        stmt = stmt.where(pos_service.get_materials_filter(Product.category))
 
     if isinstance(category, str) and category.strip().lower() != "semua":
         stmt = stmt.where(func.lower(Product.category) == category.strip().lower())
@@ -124,6 +128,19 @@ async def list_pos_products(
         )
         for p in products
     ]
+
+
+@router.get(
+    "/inventory/materials",
+    response_model=List[POSProductSchema],
+    summary="Daftar Bahan Baku & Alat Kerja untuk Restock & Produksi (Multi-Tenant)"
+)
+async def list_inventory_materials(
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mengambil seluruh bahan baku, bumbu, kemasan, dan perlengkapan untuk modal Restock & BOM."""
+    return await list_pos_products(current_user=current_user, db=db, item_type="materials")
 
 
 @router.post(

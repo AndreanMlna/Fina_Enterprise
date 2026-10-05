@@ -44,13 +44,42 @@ PP55_FINAL_TAX_RATE: float = 0.005  # PPh Final PP 55/2022 (0.5% Omzet Bruto)
 NON_SALEABLE_CATEGORIES: List[str] = [
     "alat kerja", "kemasan", "operasional", "peralatan & mesin", "peralatan", "aset", "equipment", "bahan baku"
 ]
+NON_SALEABLE_KEYWORD_PATTERNS: List[str] = [
+    "bahan baku",
+    "raw material",
+    "kemasan",
+    "packaging",
+    "bumbu",
+    "bahan pembantu",
+    "bahan segar",
+    "perishable",
+    "alat kerja",
+    "peralatan",
+    "equipment",
+    "operasional",
+    "aset",
+    "material"
+]
 
 
 class POSService:
     """Domain Service untuk operasional Point of Sale & Kasir Toko UMKM."""
 
-    @staticmethod
+    @classmethod
+    def get_saleable_filter(cls, model_attr=Product.category):
+        """Menghasilkan ekspresi SQL filter untuk mengecualikan SEMUA jenis bahan mentah, kemasan, dan alat kerja."""
+        from sqlalchemy import and_, func
+        return and_(*[~func.lower(model_attr).like(f"%{p}%") for p in NON_SALEABLE_KEYWORD_PATTERNS])
+
+    @classmethod
+    def get_materials_filter(cls, model_attr=Product.category):
+        """Menghasilkan ekspresi SQL filter untuk mengambil HANYA bahan baku, kemasan, bumbu, dan alat kerja."""
+        from sqlalchemy import or_, func
+        return or_(*[func.lower(model_attr).like(f"%{p}%") for p in NON_SALEABLE_KEYWORD_PATTERNS])
+
+    @classmethod
     async def ensure_saleable_pos_catalog(
+        cls,
         db: AsyncSession,
         tenant_id: str,
         non_saleable_categories: Sequence[str] = NON_SALEABLE_CATEGORIES
@@ -58,12 +87,13 @@ class POSService:
         """
         Auto-Healing Catalog: Jika tenant baru onboarding dan belum memiliki produk siap jual
         (misalnya data warisan lama yang hanya menginput bahan baku mentah/alat kerja internal),
-        secara cerdas menginisialisasi katalog produk jadi sesuai bidang usaha tenant
-        menggunakan katalog domain heuristik terpusat (DRY, SAK EMKM).
+        secara cerdas menginisialisasi katalog produk jadi sesuai bidang usaha tenant.
+        CATATAN SAK EMKM: Stok awal produk jadi WAJIB bernilai 0. Stok hanya akan bertambah
+        setelah pengguna mengeksekusi 'Tahap 2: Produksi Batch' dari bahan baku yang sudah dibeli di Tahap 1.
         """
         base_check_stmt = select(Product).where(
             Product.tenant_id == tenant_id,
-            ~func.lower(Product.category).in_(list(non_saleable_categories))
+            cls.get_saleable_filter(Product.category)
         )
         check_res = await db.execute(base_check_stmt)
         if check_res.scalars().first():
@@ -89,8 +119,8 @@ class POSService:
                     category=fp.get("category", "Lauk Olahan"),
                     price=float(fp.get("selling_price", 0.0)),
                     cogs=float(fp.get("cogs", 0.0)),
-                    stock=int(fp.get("stock", 10)),
-                    unit=fp.get("unit", "Pack")
+                    stock=0,  # SAK EMKM: 0 unit sebelum diproduksi dari bahan baku
+                    unit=fp.get("unit", "Porsi")
                 )
                 db.add(new_prod)
             await db.commit()

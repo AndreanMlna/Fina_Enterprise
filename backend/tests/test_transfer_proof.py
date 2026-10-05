@@ -23,11 +23,30 @@ class TestBankTransferProof(unittest.TestCase):
 
     def test_verify_bank_transfer_proof_valid(self):
         """Memverifikasi bukti transfer dengan nominal yang cocok."""
-        result = ai_service.verify_bank_transfer_proof(
-            image_bytes=self.sample_image,
-            expected_amount=2500000.0,
-            expected_invoice_number="INV-2026-0001"
-        )
+        valid_response = MagicMock()
+        valid_response.text = json.dumps({
+            "bank_name": "BCA Mobile",
+            "sender_name": "Pelanggan Setia",
+            "transfer_amount": 2500000.0,
+            "reference_number": "TRX-BCA-2026",
+            "is_tampered": False,
+            "tamper_reason": ""
+        })
+
+        if ai_service._client:
+            with patch.object(ai_service._client.models, "generate_content", return_value=valid_response):
+                result = ai_service.verify_bank_transfer_proof(
+                    image_bytes=self.sample_image,
+                    expected_amount=2500000.0,
+                    expected_invoice_number="INV-2026-0001"
+                )
+        else:
+            result = ai_service.verify_bank_transfer_proof(
+                image_bytes=self.sample_image,
+                expected_amount=2500000.0,
+                expected_invoice_number="INV-2026-0001"
+            )
+
         self.assertTrue(result["is_authentic"])
         self.assertGreaterEqual(result["ela_integrity_score"], 50)
         self.assertIn("bank_name", result)

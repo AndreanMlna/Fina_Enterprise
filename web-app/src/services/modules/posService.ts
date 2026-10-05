@@ -21,12 +21,20 @@ export class POSService {
   /**
    * Mengambil katalog produk kasir POS
    */
-  async getPOSProducts(category?: string, search?: string): Promise<POSProduct[]> {
+  async getPOSProducts(category?: string, search?: string, itemType: 'saleable' | 'materials' | 'all' = 'saleable'): Promise<POSProduct[]> {
     const params = new URLSearchParams();
     if (category && category !== 'Semua') params.append('category', category);
     if (search) params.append('search', search);
+    if (itemType) params.append('item_type', itemType);
     const query = params.toString() ? `?${params.toString()}` : '';
     return httpClient.get<POSProduct[]>(`/api/v1/pos/products${query}`, []);
+  }
+
+  /**
+   * Mengambil daftar bahan baku mentah & alat kerja untuk restock dan resep BOM
+   */
+  async getInventoryMaterials(): Promise<POSProduct[]> {
+    return httpClient.get<POSProduct[]>('/api/v1/pos/inventory/materials', []);
   }
 
   /**

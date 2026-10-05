@@ -16,6 +16,16 @@ import { api } from '../../services/api';
 import { POSRestockTab } from './restock/POSRestockTab';
 import { POSProductionBatchTab } from './restock/POSProductionBatchTab';
 
+export const isRawMaterialOrEquipment = (category?: string, name?: string): boolean => {
+  const cat = (category || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+  const patterns = [
+    'bahan', 'raw', 'material', 'kemasan', 'packaging',
+    'alat', 'mesin', 'equipment', 'operasional', 'aset', 'peralatan'
+  ];
+  return patterns.some(p => cat.includes(p) || n.includes(p));
+};
+
 interface POSProductionRestockModalProps {
   isOpen: boolean;
   products: POSProduct[];
@@ -35,13 +45,14 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 }) => {
   const [activeTab, setActiveTab] = useState<'restock' | 'production'>('restock');
 
-  // --- Form State: Restock Bahan Baku ---
+  // --- Form State: Restock Bahan Baku & Alat ---
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialName, setMaterialName] = useState<string>('');
   const [materialCategory, setMaterialCategory] = useState<string>('Bahan Baku');
   const [quantityAdded, setQuantityAdded] = useState<number>(10);
   const [unit, setUnit] = useState<string>('Kg');
   const [purchasePricePerUnit, setPurchasePricePerUnit] = useState<number>(15000);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK'>('CASH');
   const [supplierName, setSupplierName] = useState<string>('');
   const [restockNotes, setRestockNotes] = useState<string>('');
 
@@ -61,6 +72,41 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
   const [productionResult, setProductionResult] = useState<ProductionBatchResponse | null>(null);
   const [productionError, setProductionError] = useState<string | null>(null);
 
+  // --- State Bahan Baku Mentah & Alat Kerja Terpisah ---
+  const [inventoryMaterials, setInventoryMaterials] = useState<POSProduct[]>([]);
+
+  // Memuat daftar bahan baku & alat kerja khusus dari database
+  const loadMaterials = async () => {
+    try {
+      const mats = await api.getInventoryMaterials();
+      if (Array.isArray(mats)) {
+        setInventoryMaterials(mats);
+      }
+    } catch (e) {
+      console.warn('[POSProductionRestockModal] Gagal memuat bahan baku:', e);
+    }
+  };
+
+  // Bahan Baku & Alat (Tab 1)
+  const displayMaterials = useMemo(() => {
+    if (inventoryMaterials.length > 0) return inventoryMaterials;
+    return products.filter(p => isRawMaterialOrEquipment(p.category, p.name));
+  }, [inventoryMaterials, products]);
+
+  // Produk Jadi Siap Jual (Tab 2)
+  const finishedGoods = useMemo(() => {
+    const list = products.filter(p => !isRawMaterialOrEquipment(p.category, p.name));
+    return list.length > 0 ? list : products;
+  }, [products]);
+
+  // Gabungan semua katalog untuk pencocokan BOM
+  const allMaterialCatalog = useMemo(() => {
+    const map = new Map<string, POSProduct>();
+    products.forEach(p => map.set(p.id, p));
+    inventoryMaterials.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
+  }, [products, inventoryMaterials]);
+
   // Reset form bila modal dibuka
   useEffect(() => {
     if (isOpen) {
@@ -68,29 +114,39 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       setRestockError(null);
       setProductionResult(null);
       setProductionError(null);
-      if (products.length > 0) {
-        // Otomatis pilih bahan pertama jika ada
-        const firstMat = products.find(p => p.category?.toLowerCase().includes('bahan') || p.category?.toLowerCase().includes('raw')) || products[0];
-        if (firstMat) {
-          setSelectedMaterialId(firstMat.id);
-          setMaterialName(firstMat.name);
-          setUnit(firstMat.unit || 'Kg');
-          setMaterialCategory(firstMat.category || 'Bahan Baku');
-        }
+      loadMaterials();
+    }
+  }, [isOpen]);
 
-        // Otomatis pilih produk jadi pertama
-        const firstProd = products.find(p => !p.category?.toLowerCase().includes('bahan')) || products[0];
-        if (firstProd) {
-          setSelectedFinishedProductId(firstProd.id);
+  // Set default material saat displayMaterials tersedia
+  useEffect(() => {
+    if (displayMaterials.length > 0) {
+      if (!selectedMaterialId || !displayMaterials.some(m => m.id === selectedMaterialId)) {
+        const first = displayMaterials[0];
+        setSelectedMaterialId(first.id);
+        setMaterialName(first.name);
+        setUnit(first.unit || 'Kg');
+        setMaterialCategory(first.category || 'Bahan Baku');
+        if (first.cogs && first.cogs > 0) {
+          setPurchasePricePerUnit(first.cogs);
         }
       }
     }
-  }, [isOpen, products]);
+  }, [displayMaterials]);
+
+  // Set default finished product saat finishedGoods tersedia
+  useEffect(() => {
+    if (finishedGoods.length > 0) {
+      if (!selectedFinishedProductId || !finishedGoods.some(g => g.id === selectedFinishedProductId)) {
+        setSelectedFinishedProductId(finishedGoods[0].id);
+      }
+    }
+  }, [finishedGoods]);
 
   // Efek bila material ID dipilih pada form restock
   useEffect(() => {
     if (selectedMaterialId && selectedMaterialId !== '__NEW__') {
-      const selected = products.find(p => p.id === selectedMaterialId);
+      const selected = displayMaterials.find(p => p.id === selectedMaterialId) || allMaterialCatalog.find(p => p.id === selectedMaterialId);
       if (selected) {
         setMaterialName(selected.name);
         setUnit(selected.unit || 'Kg');
@@ -105,7 +161,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       setUnit('Kg');
       setPurchasePricePerUnit(10000);
     }
-  }, [selectedMaterialId, products]);
+  }, [selectedMaterialId, displayMaterials, allMaterialCatalog]);
 
   // Efek memuat resep ketika produk jadi dipilih pada form produksi
   useEffect(() => {
@@ -131,8 +187,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 
   // Objek material terpilih
   const currentMaterialProduct = useMemo(() => {
-    return products.find(p => p.id === selectedMaterialId);
-  }, [products, selectedMaterialId]);
+    return displayMaterials.find(p => p.id === selectedMaterialId) || allMaterialCatalog.find(p => p.id === selectedMaterialId);
+  }, [displayMaterials, allMaterialCatalog, selectedMaterialId]);
 
   // Simulasi Moving Weighted Average Cost sebelum submit
   const movingAveragePreview = useMemo(() => {
@@ -165,8 +221,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
     const items = recipeData.items.map(item => {
       const requiredTotal = Number((item.quantity_required * batchQuantity).toFixed(4));
       // Cari produk bahan baku di katalog untuk cek stok fisik saat ini
-      const matchedProd = item.material_id ? products.find(p => p.id === item.material_id) : products.find(p => p.name.toLowerCase() === item.material_name.toLowerCase());
-      const availableStock = matchedProd ? matchedProd.stock : 999;
+      const matchedProd = item.material_id ? allMaterialCatalog.find(p => p.id === item.material_id) : allMaterialCatalog.find(p => p.name.toLowerCase() === item.material_name.toLowerCase());
+      const availableStock = matchedProd ? matchedProd.stock : 0;
       const isSufficient = availableStock >= requiredTotal;
       if (!isSufficient) allSufficient = false;
 
@@ -194,7 +250,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       totalMaterialCost: Math.round(totalBatchCost),
       estimatedBatchHppPerUnit
     };
-  }, [recipeData, batchQuantity, batchOverheadCost, products]);
+  }, [recipeData, batchQuantity, batchOverheadCost, allMaterialCatalog]);
 
   // Handler Submit Restock Bahan Baku
   const handleRestockSubmit = async (e: React.FormEvent) => {
@@ -218,6 +274,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       quantity_added: Number(quantityAdded),
       unit: unit.trim() || 'Kg',
       purchase_price_per_unit: Number(purchasePricePerUnit),
+      payment_method: paymentMethod,
       supplier_name: supplierName.trim() || undefined,
       notes: restockNotes.trim() || undefined
     };
@@ -225,6 +282,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
     try {
       const res = await api.restockInventory(payload);
       setRestockResult(res);
+      await loadMaterials();
       onRestockSuccess(res);
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Gagal memproses restock bahan baku.';
@@ -253,12 +311,14 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       product_id: selectedFinishedProductId,
       quantity_produced: Number(batchQuantity),
       overhead_cost: Number(batchOverheadCost) || 0,
+      payment_method: paymentMethod,
       notes: batchNotes.trim() || undefined
     };
 
     try {
       const res = await api.recordProductionBatch(payload);
       setProductionResult(res);
+      await loadMaterials();
       onProductionSuccess(res);
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Gagal memproses batch produksi.';
@@ -270,7 +330,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 
   if (!isOpen) return null;
 
-  const finishedProductSelected = products.find(p => p.id === selectedFinishedProductId);
+  const finishedProductSelected = finishedGoods.find(p => p.id === selectedFinishedProductId) || products.find(p => p.id === selectedFinishedProductId);
 
   return (
     <div
@@ -399,7 +459,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
         <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {activeTab === 'restock' ? (
             <POSRestockTab
-              products={products}
+              products={displayMaterials}
               selectedMaterialId={selectedMaterialId}
               setSelectedMaterialId={setSelectedMaterialId}
               materialName={materialName}
@@ -412,6 +472,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
               setUnit={setUnit}
               purchasePricePerUnit={purchasePricePerUnit}
               setPurchasePricePerUnit={setPurchasePricePerUnit}
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
               supplierName={supplierName}
               setSupplierName={setSupplierName}
               restockNotes={restockNotes}
@@ -425,13 +487,15 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
             />
           ) : (
             <POSProductionBatchTab
-              products={products}
+              products={finishedGoods}
               selectedFinishedProductId={selectedFinishedProductId}
               setSelectedFinishedProductId={setSelectedFinishedProductId}
               batchQuantity={batchQuantity}
               setBatchQuantity={setBatchQuantity}
               batchOverheadCost={batchOverheadCost}
               setBatchOverheadCost={setBatchOverheadCost}
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
               batchNotes={batchNotes}
               setBatchNotes={setBatchNotes}
               isLoadingRecipe={isLoadingRecipe}

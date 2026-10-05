@@ -115,6 +115,7 @@ class RestockInventoryPayload(BaseModel):
     quantity_added: float = Field(gt=0, description="Jumlah kuantitas baru yang dibeli / direstock")
     unit: str = Field(default="Kg", max_length=32, description="Satuan unit")
     purchase_price_per_unit: float = Field(ge=0, description="Harga beli faktur per satuan unit")
+    payment_method: Optional[str] = Field(default="CASH", description="Metode pembayaran: CASH (1101) atau BANK (1102)")
     supplier_name: Optional[str] = None
     notes: Optional[str] = None
 
@@ -123,6 +124,7 @@ class ProductionBatchPayload(BaseModel):
     product_id: str = Field(description="ID produk jadi yang diproduksi")
     quantity_produced: int = Field(gt=0, description="Jumlah unit produk jadi yang dihasilkan")
     overhead_cost: Optional[float] = Field(default=0.0, ge=0, description="Biaya overhead langsung untuk batch ini")
+    payment_method: Optional[str] = Field(default="CASH", description="Metode pembayaran overhead: CASH (1101) atau BANK (1102)")
     notes: Optional[str] = None
 
 

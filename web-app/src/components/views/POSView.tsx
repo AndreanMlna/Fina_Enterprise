@@ -119,28 +119,32 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
     loadStaff();
   }, [tenant?.id]);
 
-  // Metrik Live Inventori & Kasir
-  const totalInventoryValue = useMemo(() => {
-    return products.reduce((acc, p) => acc + (p.stock * p.price), 0);
+  // Metrik Live Inventori & Kasir (Khusus Produk Siap Jual)
+  const isRawMaterialOrEquipment = (category?: string, name?: string): boolean => {
+    const cat = (category || '').toLowerCase();
+    const n = (name || '').toLowerCase();
+    const patterns = [
+      'bahan', 'raw', 'material', 'kemasan', 'packaging',
+      'alat', 'mesin', 'equipment', 'operasional', 'aset', 'peralatan'
+    ];
+    return patterns.some(p => cat.includes(p) || n.includes(p));
+  };
+
+  const saleableProducts = useMemo(() => {
+    return products.filter(p => !isRawMaterialOrEquipment(p.category, p.name));
   }, [products]);
 
+  const totalInventoryValue = useMemo(() => {
+    return saleableProducts.reduce((acc, p) => acc + (p.stock * p.price), 0);
+  }, [saleableProducts]);
+
   const totalStockUnits = useMemo(() => {
-    return products.reduce((acc, p) => acc + p.stock, 0);
-  }, [products]);
+    return saleableProducts.reduce((acc, p) => acc + p.stock, 0);
+  }, [saleableProducts]);
 
   // Metrik Live Shift & Presensi Karyawan
   const totalStaffCount = staffList.length;
   const presentStaffCount = staffList.filter(s => s.is_active).length;
-
-  // 2. Kategori produk dinamis dari katalog produk siap jual (Finished Goods & Services)
-  const NON_SALEABLE_CATEGORIES = useMemo(() => new Set([
-    'alat kerja', 'kemasan', 'operasional', 'peralatan & mesin', 'peralatan', 'aset', 'equipment', 'bahan baku'
-  ]), []);
-
-  const saleableProducts = useMemo(() => {
-    const filtered = products.filter(p => !NON_SALEABLE_CATEGORIES.has((p.category || '').trim().toLowerCase()));
-    return filtered.length > 0 ? filtered : products;
-  }, [products, NON_SALEABLE_CATEGORIES]);
 
   const dynamicCategories = useMemo(() => {
     const catSet = new Set<string>(["Semua"]);
@@ -477,7 +481,7 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
             </div>
             <div>
               <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
-                {products.length}
+                {saleableProducts.length}
               </div>
               <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
                 Katalog Siap Jual

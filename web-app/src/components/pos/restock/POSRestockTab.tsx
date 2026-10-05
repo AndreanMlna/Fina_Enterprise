@@ -26,6 +26,8 @@ interface POSRestockTabProps {
   setUnit: (val: string) => void;
   purchasePricePerUnit: number;
   setPurchasePricePerUnit: (val: number) => void;
+  paymentMethod: 'CASH' | 'BANK';
+  setPaymentMethod: (val: 'CASH' | 'BANK') => void;
   supplierName: string;
   setSupplierName: (val: string) => void;
   restockNotes: string;
@@ -57,6 +59,8 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
   setUnit,
   purchasePricePerUnit,
   setPurchasePricePerUnit,
+  paymentMethod,
+  setPaymentMethod,
   supplierName,
   setSupplierName,
   restockNotes,
@@ -95,7 +99,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
           {/* Pilih Bahan atau Tambah Baru */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Pilih Bahan Baku Terdaftar
+              Pilih Bahan Baku / Alat Terdaftar
             </label>
             <select
               value={selectedMaterialId}
@@ -103,7 +107,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               className="homies-select"
               style={{ width: '100%', padding: '10px 12px' }}
             >
-              <option value="__NEW__">+ Input Bahan Baku Baru</option>
+              <option value="__NEW__">+ Input Bahan Baku / Alat Baru</option>
               {products.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name} (Stok: {p.stock} {p.unit || 'Pcs'} - HPP: {formatCurrency(p.cogs)})
@@ -115,13 +119,13 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
           {/* Nama Bahan Baku */}
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-              Nama Bahan Baku / Material
+              Nama Bahan Baku / Alat / Material
             </label>
             <input
               type="text"
               value={materialName}
               onChange={(e) => setMaterialName(e.target.value)}
-              placeholder="Contoh: Kopi Arabika, Gula Cair, Cup 16oz"
+              placeholder="Contoh: Kopi Arabika, Beras Ramos, Kemasan Box, Wajan"
               required
               style={{
                 width: '100%',
@@ -150,6 +154,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               <option value="Kemasan">Kemasan & Packaging</option>
               <option value="Bahan Pembantu">Bahan Pembantu / Aditif</option>
               <option value="Bahan Segar">Bahan Segar / Perishable</option>
+              <option value="Alat Kerja">Alat Kerja & Peralatan (Equipment)</option>
             </select>
           </div>
 
@@ -195,6 +200,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               <option value="Pcs">Pcs / Butir / Buah</option>
               <option value="Pack">Pack / Kotak</option>
               <option value="Lembar">Lembar</option>
+              <option value="Unit">Unit / Set</option>
             </select>
           </div>
 
@@ -219,6 +225,22 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
                 fontSize: '0.88rem'
               }}
             />
+          </div>
+
+          {/* Sumber Dana Pembelian (SAK EMKM) */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--mint-neon)', marginBottom: '6px' }}>
+              Sumber Dana Pembelian (SAK EMKM)
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as 'CASH' | 'BANK')}
+              className="homies-select"
+              style={{ width: '100%', padding: '10px 12px', borderColor: 'rgba(16, 185, 129, 0.4)' }}
+            >
+              <option value="CASH">Kas Tunai di Tangan (Akun 1101)</option>
+              <option value="BANK">Rekening Bank Operasional (Akun 1102)</option>
+            </select>
           </div>
 
           {/* Nama Supplier */}
@@ -311,6 +333,16 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
                 {movingAveragePreview.totalStock} {unit} • {formatCurrency(movingAveragePreview.newCogs)}
               </div>
             </div>
+
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '10px 14px', borderRadius: '8px', borderLeft: '3px solid #f87171' }}>
+              <div style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: 600 }}>Dampak Kas/Bank Riil (SAK EMKM)</div>
+              <div className="mono" style={{ fontSize: '0.98rem', fontWeight: 800, color: '#fca5a5', marginTop: '2px' }}>
+                -{formatCurrency((Number(quantityAdded) || 0) * (Number(purchasePricePerUnit) || 0))}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>
+                Dipotong dari {paymentMethod === 'BANK' ? 'Bank (1102)' : 'Kas Tunai (1101)'}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -329,7 +361,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
             ) : (
               <>
                 <Boxes size={16} />
-                <span>Simpan Restock & Evaluasi Imbas BOM</span>
+                <span>Simpan Restock & Potong Kas</span>
               </>
             )}
           </button>
@@ -358,6 +390,11 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
                 Stok bahan telah terakumulasi menjadi {restockResult.material.new_total_stock} {restockResult.material.unit} dengan biaya rata-rata {formatCurrency(restockResult.material.new_weighted_cogs)} per unit.
               </div>
+              {restockResult.cash_deducted !== undefined && restockResult.cash_deducted > 0 && (
+                <div style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem' }}>
+                  <span>💸 Uang Kas Terpotong: <strong>-{formatCurrency(restockResult.cash_deducted)}</strong> ({restockResult.payment_method === 'BANK' ? 'Bank 1102' : 'Kas Tunai 1101'}) • No Jurnal SAK EMKM: <code className="mono">{restockResult.journal_entry_number || 'JV-BUY'}</code></span>
+                </div>
+              )}
             </div>
           </div>
 

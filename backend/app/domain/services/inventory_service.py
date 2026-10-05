@@ -21,6 +21,14 @@ from app.domain.models import (
     ProductionBatchRecord
 )
 from app.domain.services.ai_service import ai_service
+from app.domain.services.accounting_service import (
+    AccountingService,
+    COA_CASH_ON_HAND,
+    COA_BANK_GIRO_QRIS,
+    COA_INVENTORY_RAW,
+    COA_FIXED_EQUIPMENT,
+    COA_COGS,
+)
 from app.schemas.pos import (
     RestockInventoryPayload,
     ProductionBatchPayload
@@ -199,11 +207,41 @@ class InventoryService:
                 "ai_warning": pricing_eval["ai_insights"]["ai_executive_summary"]
             })
 
+        # 4. Auto-posting Jurnal SAK EMKM: Pembelian Bahan Baku/Alat Tunai/Bank (Mengurangi Kas/Bank & Menambah Persediaan)
+        total_purchase_amount = round(added_qty * purchase_price, 2)
+        journal_entry_num = None
+        if total_purchase_amount > 0:
+            pay_method = (getattr(payload, "payment_method", "CASH") or "CASH").upper()
+            target_cash_code = COA_BANK_GIRO_QRIS if pay_method == "BANK" else COA_CASH_ON_HAND
+
+            # Tentukan akun debit: peralatan (1201) vs persediaan bahan baku (1104)
+            is_equipment = any(k in material.category.lower() for k in ["alat", "peralatan", "mesin", "aset", "equipment"])
+            debit_code = COA_FIXED_EQUIPMENT if is_equipment else COA_INVENTORY_RAW
+
+            try:
+                journal_entry = await AccountingService.post_double_entry(
+                    db=db,
+                    tenant_id=tenant_id,
+                    description=f"Pembelian/Restock {material.name} ({added_qty} {material.unit})",
+                    debit_account_code=debit_code,
+                    credit_account_code=target_cash_code,
+                    amount=total_purchase_amount,
+                    memo_debit=f"Penambahan stok {material.name} {added_qty} {material.unit}",
+                    memo_credit=f"Pembayaran {pay_method} restock ke {payload.supplier_name or 'Pemasok'}",
+                    entry_number_prefix="JV-BUY",
+                    update_account_balances=True
+                )
+                journal_entry_num = journal_entry.entry_number
+            except Exception as e:
+                print(f"[InventoryService] Warning posting jurnal restock: {e}")
+
         await db.commit()
 
         return {
             "success": True,
-            "message": f"Restock bahan '{material.name}' berhasil. Moving Average Cost baru: Rp {new_weighted_cogs:,.2f}/{material.unit}",
+            "message": f"Restock bahan '{material.name}' berhasil. Kas/Bank berkurang Rp {total_purchase_amount:,.0f}. Moving Average Cost baru: Rp {new_weighted_cogs:,.2f}/{material.unit}",
+            "cash_deducted": total_purchase_amount,
+            "journal_entry_number": journal_entry_num,
             "material": {
                 "id": material.id,
                 "name": material.name,
@@ -341,6 +379,28 @@ class InventoryService:
         )
         db.add(batch_record)
 
+        # Auto-posting Jurnal SAK EMKM: Biaya Overhead Produksi Batch Tunai (Jika ada biaya langsung listrik/gas/kemasan)
+        overhead_journal_num = None
+        if overhead_batch > 0:
+            pay_method = (getattr(payload, "payment_method", "CASH") or "CASH").upper()
+            target_cash_code = COA_BANK_GIRO_QRIS if pay_method == "BANK" else COA_CASH_ON_HAND
+            try:
+                journal_entry = await AccountingService.post_double_entry(
+                    db=db,
+                    tenant_id=tenant_id,
+                    description=f"Biaya Overhead Produksi Batch {qty_produced} {product.name}",
+                    debit_account_code=COA_COGS,
+                    credit_account_code=target_cash_code,
+                    amount=overhead_batch,
+                    memo_debit=f"Beban overhead langsung batch {batch_num}",
+                    memo_credit=f"Pembayaran {pay_method} overhead batch {batch_num}",
+                    entry_number_prefix="JV-OVD",
+                    update_account_balances=True
+                )
+                overhead_journal_num = journal_entry.entry_number
+            except Exception as e:
+                print(f"[InventoryService] Warning posting jurnal overhead batch: {e}")
+
         await db.commit()
         await db.refresh(product)
 
@@ -352,6 +412,8 @@ class InventoryService:
             "new_finished_stock": product.stock,
             "unit_cost_hpp": unit_cost_hpp,
             "current_selling_price": float(product.price),
+            "overhead_cost": overhead_batch,
+            "overhead_journal_number": overhead_journal_num,
             "margin_status": margin_status,
             "margin_label": pricing_eval["margin_label"],
             "is_at_loss": pricing_eval["is_at_loss"],
