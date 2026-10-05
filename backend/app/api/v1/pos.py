@@ -8,7 +8,7 @@ Compliance: SAK EMKM Double-Entry Balancing & UU PDP No. 27/2022
 Database: PostgreSQL 16 + pgvector (Tabel fisik: 'products', 'pos_receipts', 'journal_entries', 'accounts')
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 import uuid
 import hashlib
 import json
@@ -79,6 +79,216 @@ _require_manager = require_role(["OWNER", "MANAGER"])
 
 # --- Domain & Regulatory Constants ---
 PP55_FINAL_TAX_RATE: float = 0.005  # PPh Final PP 55/2022 (0.5% Omzet Bruto)
+NON_SALEABLE_CATEGORIES: List[str] = [
+    "alat kerja", "kemasan", "operasional", "peralatan & mesin", "peralatan", "aset", "equipment", "bahan baku"
+]
+
+
+# --- POS Domain Helpers ---
+
+async def _ensure_saleable_pos_catalog(
+    db: AsyncSession,
+    tenant_id: str,
+    non_saleable_categories: List[str]
+) -> None:
+    """
+    Auto-Healing Catalog: Jika tenant baru onboarding dan belum memiliki produk siap jual
+    (misalnya data warisan lama yang hanya menginput bahan baku mentah/alat kerja internal),
+    secara cerdas menginisialisasi katalog produk jadi sesuai bidang usaha tenant.
+    """
+    base_check_stmt = select(Product).where(
+        Product.tenant_id == tenant_id,
+        ~func.lower(Product.category).in_(non_saleable_categories)
+    )
+    check_res = await db.execute(base_check_stmt)
+    if check_res.scalars().first():
+        return
+
+    all_stmt = select(Product).where(Product.tenant_id == tenant_id)
+    all_res = await db.execute(all_stmt)
+    all_existing = all_res.scalars().all()
+    if not all_existing:
+        return
+
+    names_lower = " ".join(p.name.lower() for p in all_existing)
+    new_finished: List[Product] = []
+
+    if any(k in names_lower for k in ["marinasi", "nila", "ayam", "ikan", "lauk"]):
+        new_finished = [
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Ayam Marinasi Bumbu Spesial (1 Ekor / Pack)",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Lauk Olahan",
+                price=45000.0,
+                cogs=28000.0,
+                stock=10,
+                unit="Pack"
+            ),
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Ikan Nila Marinasi Bumbu Kuning (500 gr)",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Lauk Olahan",
+                price=35000.0,
+                cogs=22000.0,
+                stock=10,
+                unit="Pack"
+            ),
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Paket Lauk Marinasi Spesial Komplit",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Lauk Olahan",
+                price=55000.0,
+                cogs=32000.0,
+                stock=8,
+                unit="Pack"
+            )
+        ]
+    elif any(k in names_lower for k in ["kopi", "susu", "espresso", "aren"]):
+        new_finished = [
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Es Kopi Susu Gula Aren (16oz)",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Minuman",
+                price=18000.0,
+                cogs=6500.0,
+                stock=50,
+                unit="Cup"
+            ),
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Americano Dingin (16oz)",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Minuman",
+                price=15000.0,
+                cogs=3500.0,
+                stock=40,
+                unit="Cup"
+            )
+        ]
+    elif any(k in names_lower for k in ["deterjen", "laundry", "setrika"]):
+        new_finished = [
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Jasa Cuci + Setrika Reguler (2 Hari)",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Jasa",
+                price=8000.0,
+                cogs=1800.0,
+                stock=100,
+                unit="Kg"
+            ),
+            Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name="Jasa Cuci Bedcover Besar",
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category="Jasa",
+                price=35000.0,
+                cogs=5500.0,
+                stock=20,
+                unit="Pcs"
+            )
+        ]
+
+    if new_finished:
+        for np in new_finished:
+            db.add(np)
+        await db.commit()
+
+
+async def _process_and_deduct_cart_items(
+    db: AsyncSession,
+    tenant_id: str,
+    items: List[CartItemPayload]
+) -> Tuple[List[ReceiptItemSchema], float, float, float, int]:
+    """
+    Server-side verification & pemotongan stok fisik di tabel 'products':
+    1. Mengambil produk asli dari PostgreSQL (mencegah manipulasi harga/diskon dari client).
+    2. Memverifikasi ketersediaan stok fisik di database.
+    3. Mengurangi stok produk di DB secara atomik.
+    4. Menghitung subtotal, diskon, akumulasi HPP/COGS, dan jumlah unit belanja.
+    """
+    req_prod_ids = [item.product_id for item in items]
+    stmt_prods = select(Product).where(
+        Product.tenant_id == tenant_id,
+        Product.id.in_(req_prod_ids)
+    )
+    res_prods = await db.execute(stmt_prods)
+    db_products = {p.id: p for p in res_prods.scalars().all()}
+
+    receipt_items: List[ReceiptItemSchema] = []
+    subtotal = 0.0
+    total_discount = 0.0
+    total_cogs = 0.0
+    total_items_count = 0
+
+    for item in items:
+        db_prod = db_products.get(item.product_id)
+        if not db_prod:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Produk '{item.product_name}' (ID: {item.product_id}) tidak ditemukan dalam katalog unit usaha Anda."
+            )
+
+        if db_prod.stock < item.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Stok untuk '{db_prod.name}' tidak mencukupi (Tersisa: {db_prod.stock}, diminta: {item.quantity})."
+            )
+
+        db_prod.stock -= item.quantity
+        unit_price = float(db_prod.price)
+        unit_cogs = float(db_prod.cogs or 0.0)
+
+        line_raw = item.quantity * unit_price
+        disc_amount = line_raw * (item.discount_percent / 100.0)
+        line_net = line_raw - disc_amount
+
+        subtotal += line_raw
+        total_discount += disc_amount
+        total_cogs += (item.quantity * unit_cogs)
+        total_items_count += item.quantity
+
+        receipt_items.append(
+            ReceiptItemSchema(
+                product_name=db_prod.name,
+                sku=db_prod.sku,
+                quantity=item.quantity,
+                unit_price=unit_price,
+                discount_amount=disc_amount,
+                subtotal=line_net
+            )
+        )
+
+    return receipt_items, subtotal, total_discount, total_cogs, total_items_count
+
+
+def _validate_checkout_payment(
+    payment_method: str,
+    grand_total: float,
+    cash_tendered: Optional[float]
+) -> Tuple[float, float]:
+    """Validasi pembayaran tunai / non-tunai dan menghitung uang kembalian."""
+    if payment_method.upper() == "CASH":
+        tendered = cash_tendered or 0.0
+        if tendered < grand_total:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Uang tunai diserahkan (Rp {tendered:,.0f}) kurang dari total belanja (Rp {grand_total:,.0f})."
+            )
+        return tendered, tendered - grand_total
+    else:
+        return grand_total, 0.0
 
 
 # --- Endpoints ---
@@ -100,125 +310,11 @@ async def list_pos_products(
     PRINSIP BISNIS & SAK EMKM: Bahan baku mentah internal, alat kerja, kemasan, dan tabung gas operasional
     TIDAK BOLEH tampil di rak kasir POS untuk dijual ke konsumen akhir.
     """
-    non_saleable_categories = [
-        "alat kerja", "kemasan", "operasional", "peralatan & mesin", "peralatan", "aset", "equipment", "bahan baku"
-    ]
+    await _ensure_saleable_pos_catalog(db, current_user.tenant_id, NON_SALEABLE_CATEGORIES)
 
-    # Cek apakah tenant memiliki produk siap jual
-    base_check_stmt = select(Product).where(
-        Product.tenant_id == current_user.tenant_id,
-        ~func.lower(Product.category).in_(non_saleable_categories)
-    )
-    check_res = await db.execute(base_check_stmt)
-    existing_saleables = check_res.scalars().all()
-
-    # Auto-Healing: Jika tenant baru setup versi lama dan hanya punya bahan mentah/alat kerja internal
-    if not existing_saleables:
-        all_stmt = select(Product).where(Product.tenant_id == current_user.tenant_id)
-        all_res = await db.execute(all_stmt)
-        all_existing = all_res.scalars().all()
-
-        if all_existing:
-            # Deteksi profil usaha dari bahan yang dibeli
-            names_lower = " ".join([p.name.lower() for p in all_existing])
-            new_finished: List[Product] = []
-
-            if any(k in names_lower for k in ["marinasi", "nila", "ayam", "ikan", "lauk"]):
-                new_finished = [
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Ayam Marinasi Bumbu Spesial (1 Ekor / Pack)",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Lauk Olahan",
-                        price=45000.0,
-                        cogs=28000.0,
-                        stock=10,
-                        unit="Pack"
-                    ),
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Ikan Nila Marinasi Bumbu Kuning (500 gr)",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Lauk Olahan",
-                        price=35000.0,
-                        cogs=22000.0,
-                        stock=10,
-                        unit="Pack"
-                    ),
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Paket Lauk Marinasi Spesial Komplit",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Lauk Olahan",
-                        price=55000.0,
-                        cogs=32000.0,
-                        stock=8,
-                        unit="Pack"
-                    )
-                ]
-            elif any(k in names_lower for k in ["kopi", "susu", "espresso", "aren"]):
-                new_finished = [
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Es Kopi Susu Gula Aren (16oz)",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Minuman",
-                        price=18000.0,
-                        cogs=6500.0,
-                        stock=50,
-                        unit="Cup"
-                    ),
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Americano Dingin (16oz)",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Minuman",
-                        price=15000.0,
-                        cogs=3500.0,
-                        stock=40,
-                        unit="Cup"
-                    )
-                ]
-            elif any(k in names_lower for k in ["deterjen", "laundry", "setrika"]):
-                new_finished = [
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Jasa Cuci + Setrika Reguler (2 Hari)",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Jasa",
-                        price=8000.0,
-                        cogs=1800.0,
-                        stock=100,
-                        unit="Kg"
-                    ),
-                    Product(
-                        id=f"prod-{uuid.uuid4().hex[:12]}",
-                        tenant_id=current_user.tenant_id,
-                        name="Jasa Cuci Bedcover Besar",
-                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                        category="Jasa",
-                        price=35000.0,
-                        cogs=5500.0,
-                        stock=20,
-                        unit="Pcs"
-                    )
-                ]
-
-            if new_finished:
-                for np in new_finished:
-                    db.add(np)
-                await db.commit()
-
-    # Query produk siap jual dengan filter kategori & search
     stmt = select(Product).where(
         Product.tenant_id == current_user.tenant_id,
-        ~func.lower(Product.category).in_(non_saleable_categories)
+        ~func.lower(Product.category).in_(NON_SALEABLE_CATEGORIES)
     )
 
     if isinstance(category, str) and category.strip().lower() != "semua":
@@ -425,85 +521,25 @@ async def checkout_pos(
             detail="Keranjang kasir tidak boleh kosong."
         )
 
-    # 1. Server-Side Verification: Ambil produk asli dari database untuk tenant ini
-    req_prod_ids = [item.product_id for item in payload.items]
-    stmt_prods = select(Product).where(
-        Product.tenant_id == current_user.tenant_id,
-        Product.id.in_(req_prod_ids)
+    # 1. Server-Side Verification & Pemotongan Stok Atomik
+    receipt_items, subtotal, total_discount, total_cogs, total_items_count = await _process_and_deduct_cart_items(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        items=payload.items
     )
-    res_prods = await db.execute(stmt_prods)
-    db_products = {p.id: p for p in res_prods.scalars().all()}
-
-    receipt_items: List[ReceiptItemSchema] = []
-    subtotal = 0.0
-    total_discount = 0.0
-    total_cogs = 0.0
-    total_items_count = 0
-
-    for item in payload.items:
-        db_prod = db_products.get(item.product_id)
-        if not db_prod:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Produk '{item.product_name}' (ID: {item.product_id}) tidak ditemukan dalam katalog unit usaha Anda."
-            )
-
-        # Validasi ketersediaan stok fisik di database
-        if db_prod.stock < item.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Stok untuk '{db_prod.name}' tidak mencukupi (Tersisa: {db_prod.stock}, diminta: {item.quantity})."
-            )
-
-        # Potong stok produk di database secara atomik
-        db_prod.stock -= item.quantity
-        unit_price = float(db_prod.price)
-        unit_cogs = float(db_prod.cogs or 0.0)
-
-        line_raw = item.quantity * unit_price
-        disc_amount = line_raw * (item.discount_percent / 100.0)
-        line_net = line_raw - disc_amount
-
-        subtotal += line_raw
-        total_discount += disc_amount
-        total_cogs += (item.quantity * unit_cogs)
-        total_items_count += item.quantity
-
-        receipt_items.append(
-            ReceiptItemSchema(
-                product_name=db_prod.name,
-                sku=db_prod.sku,
-                quantity=item.quantity,
-                unit_price=unit_price,
-                discount_amount=disc_amount,
-                subtotal=line_net
-            )
-        )
 
     grand_total = max(0.0, subtotal - total_discount)
-
-    # Estimasi PPh Final PP 55/2022 dari Omzet Bruto (Standar UMKM)
     tax_pp55_estimated = round(grand_total * PP55_FINAL_TAX_RATE, 2)
 
-    # 2. Validasi Pembayaran
-    cash_tendered = payload.cash_tendered or 0.0
-    change_amount = 0.0
-
-    if payload.payment_method.upper() == "CASH":
-        if cash_tendered < grand_total:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Uang tunai diserahkan (Rp {cash_tendered:,.0f}) kurang dari total belanja (Rp {grand_total:,.0f})."
-            )
-        change_amount = cash_tendered - grand_total
-    else:
-        # QRIS / TRANSFER: Nominal pas
-        cash_tendered = grand_total
-        change_amount = 0.0
+    # 2. Validasi Pembayaran & Kembalian
+    cash_tendered, change_amount = _validate_checkout_payment(
+        payment_method=payload.payment_method,
+        grand_total=grand_total,
+        cash_tendered=payload.cash_tendered
+    )
 
     # 3. Penyiapan Nomor Unik Struk & Jurnal
     now = datetime.now(timezone.utc)
-    date_str = now.strftime("%Y-%m-%d")
     timestamp_compact = now.strftime("%Y%m%d%H%M%S")
     rand_suffix = uuid.uuid4().hex[:4].upper()
     receipt_no = f"POS-{now.strftime('%Y%m%d')}-{rand_suffix}"
@@ -527,7 +563,7 @@ async def checkout_pos(
     )
     merkle_hash = journal_entry.audit_merkle_hash
 
-    # 7. Simpan Arsip Riwayat Struk ke Tabel Fisik 'pos_receipts' di PostgreSQL
+    # 5. Simpan Arsip Riwayat Struk ke Tabel Fisik 'pos_receipts' di PostgreSQL
     receipt_record = POSReceiptRecord(
         id=f"rcpt-{uuid.uuid4().hex[:12]}",
         tenant_id=current_user.tenant_id,

@@ -8,7 +8,7 @@ Security: JWT Bearer token, Tenant-scoped isolation (RBAC OWNER-only)
 Compliance: SAK EMKM Double-Entry Balancing & UU PDP No. 27/2022
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Set
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -191,85 +191,22 @@ async def recommend_startup_supplies(
         )
 
 
-@router.post(
-    "/initial-balance",
-    response_model=InitialBalanceResponse,
-    summary="Posting Saldo Awal (Modal Awal) UMKM — SAK EMKM",
-    status_code=status.HTTP_201_CREATED,
-)
-async def post_initial_balance(
+# --- Setup Domain Helpers ---
+
+NON_SALEABLE_SETUP_CATEGORIES: Set[str] = {
+    "alat kerja", "peralatan & mesin", "peralatan", "kemasan", "operasional", "aset", "equipment"
+}
+
+
+def _build_opening_balance_journal_lines(
     payload: InitialBalancePayload,
-    current_user: UserCredential = Depends(_require_owner),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Membukukan saldo awal (Opening Balance) untuk UMKM yang baru pertama kali
-    menggunakan sistem ERP FINA-ENTERPRISE.
-
-    Alur Bisnis:
-    1. Validasi: tenant belum pernah setup (idempotency guard)
-    2. Hitung total aset, utang, dan modal pemilik (auto-computed)
-    3. Buat jurnal saldo awal multi-line (Double-Entry SAK EMKM)
-    4. Buat record Product untuk setiap item persediaan
-    5. Tandai tenant sebagai `is_setup_complete = True`
-
-    Persamaan Dasar Akuntansi SAK EMKM:
-        Aset = Kewajiban + Modal Pemilik
-        Modal Pemilik = Σ Aset - Σ Kewajiban  (auto-computed)
-    """
-    # 1. Idempotency guard: cegah setup ganda
-    tenant = await db.get(Tenant, current_user.tenant_id)
-    if not tenant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tenant tidak ditemukan."
-        )
-
-    if tenant.is_setup_complete:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Setup saldo awal sudah pernah dilakukan untuk tenant ini. "
-                   "Tidak dapat melakukan setup ulang (idempotency protection)."
-        )
-
-    # 2. Kalkulasi komponen saldo awal
-    total_inventory = sum(
-        item.quantity * item.unit_cost for item in payload.inventory_items
-    )
-    total_equipment = sum(
-        a.value for a in payload.fixed_assets if a.asset_type == "equipment"
-    )
-    total_vehicles = sum(
-        a.value for a in payload.fixed_assets if a.asset_type == "vehicle"
-    )
-
-    total_assets = (
-        payload.cash_on_hand
-        + payload.bank_balance
-        + total_inventory
-        + total_equipment
-        + total_vehicles
-    )
-    total_liabilities = payload.opening_payables
-    owner_equity = total_assets - total_liabilities
-
-    if owner_equity <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Modal pemilik tidak boleh negatif atau nol. "
-                   f"Total Aset (Rp {total_assets:,.0f}) harus lebih besar dari "
-                   f"Total Utang (Rp {total_liabilities:,.0f})."
-        )
-
-    if total_assets <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Total aset harus lebih besar dari 0. "
-                   "Masukkan minimal saldo kas atau stok barang."
-        )
-
-    # 3. Susun baris jurnal saldo awal (Opening Balance)
-    journal_lines = []
+    total_inventory: float,
+    total_equipment: float,
+    total_vehicles: float,
+    owner_equity: float
+) -> List[Dict[str, Any]]:
+    """Membentuk baris jurnal pembukuan berpasangan saldo awal (Double-Entry SAK EMKM)."""
+    journal_lines: List[Dict[str, Any]] = []
 
     if payload.cash_on_hand > 0:
         journal_lines.append({
@@ -327,6 +264,141 @@ async def post_initial_balance(
         "memo": "Modal pemilik awal (auto-computed: Aset - Kewajiban)"
     })
 
+    return journal_lines
+
+
+def _create_opening_catalog_products(
+    db: AsyncSession,
+    tenant_id: str,
+    payload: InitialBalancePayload
+) -> int:
+    """
+    Mendaftarkan produk ke tabel 'products' untuk kasir POS.
+    PRINSIP SAK EMKM & ERP: Alat kerja, kemasan vakum, gas operasional tidak dijual di kasir POS.
+    """
+    products_created = 0
+
+    if payload.finished_products and len(payload.finished_products) > 0:
+        # Prioritas 1: Gunakan katalog produk jadi siap jual yang dikonfirmasi pengguna / direkomendasikan AI
+        for fp in payload.finished_products:
+            product = Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name=fp.name,
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category=fp.category or "Umum",
+                price=fp.selling_price,
+                cogs=fp.cogs,
+                stock=fp.stock if fp.stock > 0 else 10,
+                unit=fp.unit or "Pcs",
+            )
+            db.add(product)
+            products_created += 1
+    else:
+        # Fallback (Manual Flow): Hanya daftarkan item persediaan yang BUKAN alat kerja, kemasan, atau operasional
+        for item in payload.inventory_items:
+            cat_clean = item.category.strip().lower()
+            if cat_clean in NON_SALEABLE_SETUP_CATEGORIES:
+                continue
+
+            selling_p = item.selling_price if item.selling_price > 0 else (item.unit_cost * 1.3)
+            product = Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=tenant_id,
+                name=item.name,
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category=item.category,
+                price=selling_p,
+                cogs=item.unit_cost,
+                stock=item.quantity,
+                unit=item.unit,
+            )
+            db.add(product)
+            products_created += 1
+
+    return products_created
+
+
+@router.post(
+    "/initial-balance",
+    response_model=InitialBalanceResponse,
+    summary="Posting Saldo Awal (Modal Awal) UMKM — SAK EMKM",
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_initial_balance(
+    payload: InitialBalancePayload,
+    current_user: UserCredential = Depends(_require_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Membukukan saldo awal (Opening Balance) untuk UMKM yang baru pertama kali
+    menggunakan sistem ERP FINA-ENTERPRISE.
+
+    Alur Bisnis:
+    1. Validasi: tenant belum pernah setup (idempotency guard)
+    2. Hitung total aset, utang, dan modal pemilik (auto-computed)
+    3. Buat jurnal saldo awal multi-line (Double-Entry SAK EMKM)
+    4. Buat record Product untuk setiap item persediaan
+    5. Tandai tenant sebagai `is_setup_complete = True`
+
+    Persamaan Dasar Akuntansi SAK EMKM:
+        Aset = Kewajiban + Modal Pemilik
+        Modal Pemilik = Σ Aset - Σ Kewajiban  (auto-computed)
+    """
+    # 1. Idempotency guard: cegah setup ganda
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant tidak ditemukan."
+        )
+
+    if tenant.is_setup_complete:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Setup saldo awal sudah pernah dilakukan untuk tenant ini. "
+                   "Tidak dapat melakukan setup ulang (idempotency protection)."
+        )
+
+    # 2. Kalkulasi komponen saldo awal & modal pemilik
+    total_inventory = sum(item.quantity * item.unit_cost for item in payload.inventory_items)
+    total_equipment = sum(a.value for a in payload.fixed_assets if a.asset_type == "equipment")
+    total_vehicles = sum(a.value for a in payload.fixed_assets if a.asset_type == "vehicle")
+
+    total_assets = (
+        payload.cash_on_hand
+        + payload.bank_balance
+        + total_inventory
+        + total_equipment
+        + total_vehicles
+    )
+    total_liabilities = payload.opening_payables
+    owner_equity = total_assets - total_liabilities
+
+    if owner_equity <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Modal pemilik tidak boleh negatif atau nol. "
+                   f"Total Aset (Rp {total_assets:,.0f}) harus lebih besar dari "
+                   f"Total Utang (Rp {total_liabilities:,.0f})."
+        )
+
+    if total_assets <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Total aset harus lebih besar dari 0. "
+                   "Masukkan minimal saldo kas atau stok barang."
+        )
+
+    # 3. Susun baris jurnal saldo awal
+    journal_lines = _build_opening_balance_journal_lines(
+        payload=payload,
+        total_inventory=total_inventory,
+        total_equipment=total_equipment,
+        total_vehicles=total_vehicles,
+        owner_equity=owner_equity
+    )
+
     # 4. Posting jurnal atomik ACID via AccountingService
     try:
         entry = await AccountingService.post_opening_balance(
@@ -342,55 +414,15 @@ async def post_initial_balance(
             detail=str(e)
         )
 
-    # 5. Buat record Product untuk katalog POS kasir (Finished Goods / Saleable Items)
-    # PRINSIP SAK EMKM & ERP: Bahan mentah internal, kemasan vakum, gas elpiji, dan alat kerja
-    # TIDAK DIJUAL di kasir POS. Yang dijual adalah produk/menu jadi olahan atau barang dagangan siap jual.
-    products_created = 0
-    NON_SALEABLE_CATEGORIES = {
-        "alat kerja", "peralatan & mesin", "peralatan", "kemasan", "operasional", "aset", "equipment"
-    }
-
-    if payload.finished_products and len(payload.finished_products) > 0:
-        # Prioritas 1: Gunakan katalog produk jadi siap jual yang dikonfirmasi pengguna / direkomendasikan AI
-        for fp in payload.finished_products:
-            product = Product(
-                id=f"prod-{uuid.uuid4().hex[:12]}",
-                tenant_id=current_user.tenant_id,
-                name=fp.name,
-                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                category=fp.category or "Umum",
-                price=fp.selling_price,
-                cogs=fp.cogs,
-                stock=fp.stock if fp.stock > 0 else 10,
-                unit=fp.unit or "Pcs",
-            )
-            db.add(product)
-            products_created += 1
-    else:
-        # Fallback (Manual Flow): Hanya daftarkan item persediaan yang BUKAN alat kerja, kemasan, atau operasional
-        for item in payload.inventory_items:
-            cat_clean = item.category.strip().lower()
-            if cat_clean in NON_SALEABLE_CATEGORIES:
-                continue  # Lewati alat kerja/kemasan/operasional agar tidak masuk kasir POS
-            
-            selling_p = item.selling_price if item.selling_price > 0 else (item.unit_cost * 1.3)
-            product = Product(
-                id=f"prod-{uuid.uuid4().hex[:12]}",
-                tenant_id=current_user.tenant_id,
-                name=item.name,
-                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-                category=item.category,
-                price=selling_p,
-                cogs=item.unit_cost,
-                stock=item.quantity,
-                unit=item.unit,
-            )
-            db.add(product)
-            products_created += 1
+    # 5. Buat record Product untuk katalog POS kasir
+    products_created = _create_opening_catalog_products(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        payload=payload
+    )
 
     # 6. Tandai setup selesai (idempotency flag)
     tenant.is_setup_complete = True
-
     await db.commit()
 
     return InitialBalanceResponse(
