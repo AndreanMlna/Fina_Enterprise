@@ -35,7 +35,6 @@ export const CockpitTableCard: React.FC<CockpitTableCardProps> = ({
   onSearchChange,
   staffList,
   filteredStaffList,
-  transactions,
   filteredTransactions,
   liveEntriesCount,
   onNavigate
@@ -79,7 +78,7 @@ export const CockpitTableCard: React.FC<CockpitTableCardProps> = ({
                 color: tableMode === 'STAFF' ? '#000000' : '#94a3b8'
               }}
             >
-              Karyawan ({staffList.length > 0 ? staffList.length : 3})
+              Karyawan ({staffList.length})
             </button>
             <button
               type="button"
@@ -96,7 +95,7 @@ export const CockpitTableCard: React.FC<CockpitTableCardProps> = ({
                 color: tableMode === 'TRANSACTIONS' ? '#000000' : '#94a3b8'
               }}
             >
-              Transaksi ({liveEntriesCount > 0 ? liveEntriesCount : transactions.length})
+              Transaksi ({liveEntriesCount})
             </button>
           </div>
         </div>
@@ -174,8 +173,15 @@ export const CockpitTableCard: React.FC<CockpitTableCardProps> = ({
           </thead>
           <tbody>
             {tableMode === 'STAFF' ? (
-              filteredStaffList.map((staff, idx) => {
-                const empId = `EMP-${(idx + 1).toString().padStart(4, '0')}`;
+              filteredStaffList.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '36px 14px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>
+                    Belum ada data karyawan terdaftar.
+                  </td>
+                </tr>
+              ) : (
+                filteredStaffList.map((staff, idx) => {
+                  const empId = `EMP-${(idx + 1).toString().padStart(4, '0')}`;
                 const dept = staff.role === 'OWNER' ? 'Direksi & Manajemen' : staff.role === 'MANAGER' ? 'Operasional Toko' : 'Kasir & Front Office';
                 const emailOrPhone = maskPhone(staff.phone_number);
                 const cleanName = staff.full_name ? staff.full_name.replace(/\s*\(.*?\)/g, '') : 'Staf';
@@ -264,7 +270,13 @@ export const CockpitTableCard: React.FC<CockpitTableCardProps> = ({
                     </td>
                   </tr>
                 );
-              })
+              }))
+            ) : filteredTransactions.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ padding: '36px 14px', textAlign: 'center', color: '#64748B', fontSize: '0.82rem' }}>
+                  Belum ada transaksi jurnal kasir tercatat untuk tenant ini.
+                </td>
+              </tr>
             ) : (
               filteredTransactions.map((trx) => (
                 <tr key={trx.id} className="homies-table-row" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)' }}>

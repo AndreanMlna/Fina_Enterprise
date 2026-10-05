@@ -18,7 +18,7 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
   onNavigate
 }) => {
   // Semicircular Radial Gauge Meter Calculation (270° Arc from 135° to 405°)
-  const healthScore = Math.max(0, Math.min(100, kpi.financialHealthIndex > 0 ? kpi.financialHealthIndex : 80));
+  const healthScore = Math.max(0, Math.min(100, kpi.financialHealthIndex || 0));
   const radius = 72;
   const strokeCircumference = 2 * Math.PI * radius * 0.75; // ~339.29
   const strokeOffset = strokeCircumference * (1 - healthScore / 100);
@@ -106,7 +106,7 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
               </div>
               <div>
                 <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
-                  {kpi.liquidCash > 0 ? (kpi.liquidCash >= 1000000 ? `${(kpi.liquidCash / 1000000).toFixed(1)}M` : `${(kpi.liquidCash / 1000).toFixed(0)}K`) : '75.6M'}
+                  {kpi.liquidCash > 0 ? (kpi.liquidCash >= 1000000 ? `${(kpi.liquidCash / 1000000).toFixed(1)}M` : `${(kpi.liquidCash / 1000).toFixed(0)}K`) : 'Rp 0'}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
                   Kas Likuid
@@ -133,7 +133,7 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
                 <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
                   {kpi.totalRevenue && kpi.totalRevenue > 0 
                     ? (kpi.totalRevenue >= 1000000 ? `${(kpi.totalRevenue / 1000000).toFixed(1)}M` : `${(kpi.totalRevenue / 1000).toFixed(0)}K`)
-                    : '184.5M'}
+                    : 'Rp 0'}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
                   Omzet Usaha
@@ -158,7 +158,7 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
               </div>
               <div>
                 <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
-                  {kpi.activeAccountsReceivable > 0 ? (kpi.activeAccountsReceivable >= 1000000 ? `${(kpi.activeAccountsReceivable / 1000000).toFixed(1)}M` : `${(kpi.activeAccountsReceivable / 1000).toFixed(0)}K`) : '8.9M'}
+                  {kpi.activeAccountsReceivable > 0 ? (kpi.activeAccountsReceivable >= 1000000 ? `${(kpi.activeAccountsReceivable / 1000000).toFixed(1)}M` : `${(kpi.activeAccountsReceivable / 1000).toFixed(0)}K`) : 'Rp 0'}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
                   Piutang Aktif
@@ -183,7 +183,7 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
               </div>
               <div>
                 <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
-                  {staffList.length > 0 ? `${staffList.length} Staf` : '3 Staf'}
+                  {`${staffList.length} Staf`}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
                   Staf Aktif

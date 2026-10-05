@@ -129,8 +129,8 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
   }, [products]);
 
   // Metrik Live Shift & Presensi Karyawan
-  const totalStaffCount = staffList.length > 0 ? staffList.length : 3;
-  const presentStaffCount = staffList.length > 0 ? staffList.filter(s => s.is_active).length : 3;
+  const totalStaffCount = staffList.length;
+  const presentStaffCount = staffList.filter(s => s.is_active).length;
 
   // 2. Kategori produk dinamis dari inventaris fisik tenant
   const dynamicCategories = useMemo(() => {

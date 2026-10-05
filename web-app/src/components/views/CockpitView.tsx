@@ -149,30 +149,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
       });
     }
 
-    return [
-      {
-        id: 'trx-1',
-        name: 'Penjualan Kasir POS #00129',
-        refId: '3644765346',
-        accountRole: 'Pendapatan Usaha (4-101)',
-        nominal: 450000,
-        status: 'Active',
-        date: '28 Sep 2026',
-        department: 'Kasir Toko (Tunai)',
-        avatarSeed: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=60'
-      },
-      {
-        id: 'trx-2',
-        name: 'Pembelian Grosir Bahan Baku #00128',
-        refId: '365467354',
-        accountRole: 'Beban Pokok Penjualan (5-101)',
-        nominal: 1250000,
-        status: 'Active',
-        date: '28 Sep 2026',
-        department: 'Transfer Bank BCA',
-        avatarSeed: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=60'
-      }
-    ];
+    return [];
   }, [liveEntries]);
 
   // Filter pencarian

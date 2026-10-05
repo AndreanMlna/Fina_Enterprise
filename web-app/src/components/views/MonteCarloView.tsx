@@ -20,7 +20,7 @@ export const MonteCarloView: React.FC<MonteCarloViewProps> = ({ kpi }) => {
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [baselineData, setBaselineData] = useState<RunwayBaseline | null>(null);
   const [isLoadingBaseline, setIsLoadingBaseline] = useState<boolean>(true);
-  const baseCash = (kpi && kpi.liquidCash > 0) ? kpi.liquidCash : 48650000;
+  const baseCash = (kpi && typeof kpi.liquidCash === 'number') ? kpi.liquidCash : 0;
 
   const [config, setConfig] = useState<MonteCarloConfig>({
     initialCash: baseCash,

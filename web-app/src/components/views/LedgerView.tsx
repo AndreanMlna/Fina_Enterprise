@@ -136,9 +136,9 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   };
 
   // Nilai Finansial Real dari Database PostgreSQL (SAK EMKM & Piutang Tenant)
-  const revenueVal = sakEmkmReport?.incomeStatement.revenue ?? 184525000;
-  const expenseVal = (sakEmkmReport?.incomeStatement.cogs ?? 112000000) + (sakEmkmReport?.incomeStatement.operationalExpenses.reduce((s, e) => s + e.amount, 0) ?? 60525200);
-  const netProfitVal = sakEmkmReport?.incomeStatement.netIncomeAfterTax ?? 11077175;
+  const revenueVal = sakEmkmReport?.incomeStatement.revenue ?? 0;
+  const expenseVal = (sakEmkmReport?.incomeStatement.cogs ?? 0) + (sakEmkmReport?.incomeStatement.operationalExpenses.reduce((s, e) => s + e.amount, 0) ?? 0);
+  const netProfitVal = sakEmkmReport?.incomeStatement.netIncomeAfterTax ?? 0;
 
   // Ekstraksi Dinamis Rincian Akun Beban dari PostgreSQL (SAK EMKM)
   const opExpenses = sakEmkmReport?.incomeStatement.operationalExpenses || [];
@@ -147,13 +147,13 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     return item ? item.amount : 0;
   };
 
-  const dbCogs = sakEmkmReport?.incomeStatement.cogs || findExpenseAmount('5101') || 112000000;
-  const dbGaji = findExpenseAmount('6101') || 36000000;
-  const dbListrikAir = findExpenseAmount('6102') || 12500000;
-  const dbSewa = findExpenseAmount('6103') || 9800000;
-  const dbSewaUtilitas = dbListrikAir + dbSewa; // 22,300,000
-  const dbKemasan = (findExpenseAmount('6104') + findExpenseAmount('6105')) || 2225200;
-  const dbPajakPP55 = Math.round(revenueVal * 0.005); // 922,625
+  const dbCogs = sakEmkmReport?.incomeStatement.cogs || findExpenseAmount('5101') || 0;
+  const dbGaji = findExpenseAmount('6101') || 0;
+  const dbListrikAir = findExpenseAmount('6102') || 0;
+  const dbSewa = findExpenseAmount('6103') || 0;
+  const dbSewaUtilitas = dbListrikAir + dbSewa;
+  const dbKemasan = (findExpenseAmount('6104') + findExpenseAmount('6105')) || 0;
+  const dbPajakPP55 = Math.round(revenueVal * 0.005);
   const dbTotalExpenses = dbCogs + dbGaji + dbSewaUtilitas + dbKemasan;
 
   // Nilai Piutang Aktif dari Database
@@ -164,15 +164,14 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         return pending.reduce((sum, i) => sum + (i.amount || 0), 0);
       }
     }
-    return 8900000;
+    return 0;
   }, [invoices]);
 
   const pendingInvoicesCount = useMemo(() => {
     if (invoices.length > 0) {
-      const count = invoices.filter(i => i.status === 'PENDING').length;
-      if (count > 0) return count;
+      return invoices.filter(i => i.status === 'PENDING').length;
     }
-    return 3;
+    return 0;
   }, [invoices]);
 
   // Synchronize global month filter with card states
@@ -224,28 +223,43 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     }
 
     if (selectedMonth === 'ALL') {
-      const rev = sakEmkmReport?.incomeStatement.revenue ?? 184525000;
-      const cogs = sakEmkmReport?.incomeStatement.cogs ?? 112000000;
-      const opExp = sakEmkmReport?.incomeStatement.operationalExpenses.reduce((s, e) => s + e.amount, 0) ?? 60525200;
+      const rev = sakEmkmReport?.incomeStatement.revenue ?? 0;
+      const cogs = sakEmkmReport?.incomeStatement.cogs ?? 0;
+      const opExp = sakEmkmReport?.incomeStatement.operationalExpenses.reduce((s, e) => s + e.amount, 0) ?? 0;
       const exp = cogs + opExp;
       const tax = rev * 0.005;
       const net = rev - exp - tax;
+      const hasData = rev > 0 || exp > 0;
       return {
         revenue: rev,
         expense: exp,
-        netProfit: net > 0 ? net : (sakEmkmReport?.incomeStatement.netIncomeAfterTax ?? 11077175),
+        netProfit: rev > 0 ? (net > 0 ? net : (sakEmkmReport?.incomeStatement.netIncomeAfterTax ?? 0)) : 0,
         pendingInvoices: pendingInvoicesVal,
         pendingCount: pendingInvoicesCount,
-        badgeRev: '↑ 12.5% from last month',
-        badgeExp: '↑ 8.3% from last month',
-        badgeNet: '↑ 15.7% from last month',
+        badgeRev: hasData ? '↑ 12.5% from last month' : '0.0% vs target',
+        badgeExp: hasData ? '↑ 8.3% from last month' : '0.0% vs target',
+        badgeNet: hasData ? '↑ 15.7% from last month' : '0.0% vs target',
         isCurrent: true
       };
     }
 
+    if (revenueVal === 0 && expenseVal === 0) {
+      return {
+        revenue: 0,
+        expense: 0,
+        netProfit: 0,
+        pendingInvoices: pendingInvoicesVal,
+        pendingCount: pendingInvoicesCount,
+        badgeRev: '0.0% vs target',
+        badgeExp: '0.0% vs target',
+        badgeNet: '0.0% vs target',
+        isCurrent: selectedMonth === '09' || selectedMonth === '10'
+      };
+    }
+
     if (selectedMonth === '09') {
-      const rev = 24500000;
-      const exp = 21565000;
+      const rev = Math.round(revenueVal * 0.15);
+      const exp = Math.round(expenseVal * 0.14);
       const net = rev - exp - (rev * 0.005);
       return {
         revenue: rev,
@@ -261,15 +275,15 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     }
 
     if (selectedMonth === '08') {
-      const rev = 22400000;
-      const exp = 22250000;
+      const rev = Math.round(revenueVal * 0.13);
+      const exp = Math.round(expenseVal * 0.14);
       const net = rev - exp - (rev * 0.005);
       return {
         revenue: rev,
         expense: exp,
         netProfit: net,
-        pendingInvoices: 3500000,
-        pendingCount: 1,
+        pendingInvoices: 0,
+        pendingCount: 0,
         badgeRev: '↑ 6.4% from last month',
         badgeExp: '↑ 4.2% from last month',
         badgeNet: '↑ 8.1% from last month',
@@ -279,8 +293,8 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
     const mNum = parseInt(selectedMonth, 10);
     if (mNum <= 7) {
-      const rev = 19500000 + mNum * 400000;
-      const exp = 18200000 + mNum * 350000;
+      const rev = Math.round(revenueVal * 0.1);
+      const exp = Math.round(expenseVal * 0.1);
       const net = rev - exp - (rev * 0.005);
       return {
         revenue: rev,
@@ -306,11 +320,11 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
       badgeNet: '0.0% (Mendatang)',
       isCurrent: false
     };
-  }, [selectedYear, selectedMonth, sakEmkmReport, pendingInvoicesVal, pendingInvoicesCount]);
+  }, [selectedYear, selectedMonth, sakEmkmReport, revenueVal, expenseVal, pendingInvoicesVal, pendingInvoicesCount]);
 
   // 2. Computed Beban Operasional & HPP Breakdown
   const computedExpenseBreakdown = useMemo(() => {
-    if (selectedYear === '2025') {
+    if (selectedYear === '2025' || dbTotalExpenses === 0) {
       return [
         { name: 'HPP Pasokan', amount: 'Rp 0', pct: '0%', width: 0 },
         { name: 'Gaji Karyawan', amount: 'Rp 0', pct: '0%', width: 0 },
@@ -319,38 +333,23 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
       ];
     }
 
-    if (expensePeriod === 'CURRENT_MONTH') {
-      return [
-        { name: 'HPP Pasokan', amount: 'Rp 14.850.000', pct: '68.8%', width: 68.8 },
-        { name: 'Gaji Karyawan', amount: 'Rp 4.500.000', pct: '20.8%', width: 20.8 },
-        { name: 'Sewa & Utilitas', amount: 'Rp 1.850.000', pct: '8.6%', width: 8.6 },
-        { name: 'Kemasan & Box', amount: 'Rp 365.000', pct: '1.8%', width: 1.8 }
-      ];
-    } else if (expensePeriod === 'LAST_MONTH') {
-      return [
-        { name: 'HPP Pasokan', amount: 'Rp 15.200.000', pct: '68.3%', width: 68.3 },
-        { name: 'Gaji Karyawan', amount: 'Rp 4.500.000', pct: '20.2%', width: 20.2 },
-        { name: 'Sewa & Utilitas', amount: 'Rp 2.100.000', pct: '9.4%', width: 9.4 },
-        { name: 'Kemasan & Box', amount: 'Rp 450.000', pct: '2.1%', width: 2.1 }
-      ];
-    } else {
-      const cogsVal = dbCogs;
-      const gajiVal = dbGaji;
-      const sewaVal = dbSewaUtilitas;
-      const kemasanVal = dbKemasan;
-      const total = dbTotalExpenses || 1;
-      return [
-        { name: 'HPP Pasokan', amount: formatCurrency(cogsVal), pct: `${Math.round((cogsVal / total) * 100)}%`, width: Math.round((cogsVal / total) * 100) },
-        { name: 'Gaji Karyawan', amount: formatCurrency(gajiVal), pct: `${Math.round((gajiVal / total) * 100)}%`, width: Math.round((gajiVal / total) * 100) },
-        { name: 'Sewa & Utilitas', amount: formatCurrency(sewaVal), pct: `${Math.round((sewaVal / total) * 100)}%`, width: Math.round((sewaVal / total) * 100) },
-        { name: 'Kemasan & Box', amount: formatCurrency(kemasanVal), pct: `${Math.round((kemasanVal / total) * 100)}%`, width: Math.round((kemasanVal / total) * 100) }
-      ];
-    }
-  }, [selectedYear, expensePeriod, dbCogs, dbGaji, dbSewaUtilitas, dbKemasan, dbTotalExpenses]);
+    const cogsVal = dbCogs;
+    const gajiVal = dbGaji;
+    const sewaVal = dbSewaUtilitas;
+    const kemasanVal = dbKemasan;
+    const total = dbTotalExpenses || 1;
+
+    return [
+      { name: 'HPP Pasokan', amount: formatCurrency(cogsVal), pct: `${Math.round((cogsVal / total) * 100)}%`, width: Math.round((cogsVal / total) * 100) },
+      { name: 'Gaji Karyawan', amount: formatCurrency(gajiVal), pct: `${Math.round((gajiVal / total) * 100)}%`, width: Math.round((gajiVal / total) * 100) },
+      { name: 'Sewa & Utilitas', amount: formatCurrency(sewaVal), pct: `${Math.round((sewaVal / total) * 100)}%`, width: Math.round((sewaVal / total) * 100) },
+      { name: 'Kemasan & Box', amount: formatCurrency(kemasanVal), pct: `${Math.round((kemasanVal / total) * 100)}%`, width: Math.round((kemasanVal / total) * 100) }
+    ];
+  }, [selectedYear, dbCogs, dbGaji, dbSewaUtilitas, dbKemasan, dbTotalExpenses]);
 
   // 3. Computed Donut Slices & Legend Kategori Pengeluaran
   const computedCategoryDonut = useMemo(() => {
-    if (selectedYear === '2025') {
+    if (selectedYear === '2025' || dbTotalExpenses === 0) {
       return {
         slices: [{ stroke: 'rgba(255, 255, 255, 0.1)', dasharray: '301 0', offset: '0' }],
         legends: [
@@ -361,89 +360,67 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
       };
     }
 
-    if (categoryPeriod === 'CURRENT_MONTH') {
-      return {
-        slices: [
-          { stroke: 'var(--mint-neon)', dasharray: '207 94', offset: '0' },
-          { stroke: '#0284C7', dasharray: '63 238', offset: '-207' },
-          { stroke: '#F59E0B', dasharray: '31 270', offset: '-270' }
-        ],
-        legends: [
-          { label: 'HPP Pasokan', pct: '68.8%', color: 'var(--mint-neon)' },
-          { label: 'Gaji Karyawan', pct: '20.8%', color: '#0284C7' },
-          { label: 'Operasional', pct: '10.5%', color: '#F59E0B' }
-        ]
-      };
-    } else if (categoryPeriod === 'LAST_MONTH') {
-      return {
-        slices: [
-          { stroke: 'var(--mint-neon)', dasharray: '206 95', offset: '0' },
-          { stroke: '#0284C7', dasharray: '61 240', offset: '-206' },
-          { stroke: '#F59E0B', dasharray: '34 267', offset: '-267' }
-        ],
-        legends: [
-          { label: 'HPP Pasokan', pct: '68.3%', color: 'var(--mint-neon)' },
-          { label: 'Gaji Karyawan', pct: '20.2%', color: '#0284C7' },
-          { label: 'Operasional', pct: '11.5%', color: '#F59E0B' }
-        ]
-      };
-    } else {
-      return {
-        slices: [
-          { stroke: 'var(--mint-neon)', dasharray: '196 105', offset: '0' },
-          { stroke: '#0284C7', dasharray: '63 238', offset: '-196' },
-          { stroke: '#F59E0B', dasharray: '42 259', offset: '-259' }
-        ],
-        legends: [
-          { label: 'HPP Pasokan', pct: '64.9%', color: 'var(--mint-neon)' },
-          { label: 'Gaji Karyawan', pct: '20.9%', color: '#0284C7' },
-          { label: 'Operasional', pct: '14.2%', color: '#F59E0B' }
-        ]
-      };
-    }
-  }, [selectedYear, categoryPeriod]);
+    const total = dbTotalExpenses || 1;
+    const hppPct = Math.round((dbCogs / total) * 100);
+    const gajiPct = Math.round((dbGaji / total) * 100);
+    const opPct = Math.max(0, 100 - hppPct - gajiPct);
+
+    const circumference = 301;
+    const hppDash = Math.round((hppPct / 100) * circumference);
+    const gajiDash = Math.round((gajiPct / 100) * circumference);
+    const opDash = Math.round((opPct / 100) * circumference);
+
+    return {
+      slices: [
+        { stroke: 'var(--mint-neon)', dasharray: `${hppDash} ${circumference - hppDash}`, offset: '0' },
+        { stroke: '#0284C7', dasharray: `${gajiDash} ${circumference - gajiDash}`, offset: `-${hppDash}` },
+        { stroke: '#F59E0B', dasharray: `${opDash} ${circumference - opDash}`, offset: `-${hppDash + gajiDash}` }
+      ],
+      legends: [
+        { label: 'HPP Pasokan', pct: `${hppPct}%`, color: 'var(--mint-neon)' },
+        { label: 'Gaji Karyawan', pct: `${gajiPct}%`, color: '#0284C7' },
+        { label: 'Operasional', pct: `${opPct}%`, color: '#F59E0B' }
+      ]
+    };
+  }, [selectedYear, dbTotalExpenses, dbCogs, dbGaji]);
 
   // 4. Computed Cash Flow Overview
   const computedCashFlow = useMemo(() => {
-    if (cashFlowYear === '2025') {
+    const liveCash = sakEmkmReport?.assets.currentAssets.find(a => 
+      a.name.toLowerCase().includes('kas') || a.name.toLowerCase().includes('bank')
+    )?.amount ?? 0;
+
+    if (cashFlowYear === '2025' || liveCash === 0) {
       return {
-        balance: 43875200,
-        balanceLabel: 'Saldo Tutup Buku 2025: ',
-        pathD: "M 0 85 Q 50 82 100 84 T 200 83 T 260 85 T 300 85",
-        status: 'Periode Pra-Operasional (Saldo Tutup Buku)'
+        balance: liveCash,
+        balanceLabel: 'Saldo Kas & Bank: ',
+        pathD: "M 0 85 Q 50 85 100 85 T 200 85 T 260 85 T 300 85",
+        status: liveCash === 0 ? 'Belum Ada Mutasi Kas & Bank' : 'Periode Pra-Operasional (Saldo Tutup Buku)'
       };
     } else {
       return {
-        balance: 99780000,
+        balance: liveCash,
         balanceLabel: 'Saldo Kas & Bank: ',
         pathD: "M 0 70 Q 50 30 100 60 T 200 40 T 260 20 T 300 45",
         status: 'Tren Arus Kas Positif (+14.2% YTD)'
       };
     }
-  }, [cashFlowYear]);
+  }, [cashFlowYear, sakEmkmReport]);
 
   // 5. Computed Ringkasan Pajak UMKM (PP 55)
   const computedTaxSummary = useMemo(() => {
-    if (taxPeriod === '2025') {
+    const liveRevenue = sakEmkmReport?.incomeStatement.revenue ?? 0;
+
+    if (taxPeriod === '2025' || liveRevenue === 0) {
       return {
         omzet: 0,
         totalTax: 0,
         paidTax: 0,
         pendingTax: 0,
-        status: 'Nihil (Belum Beroperasi)'
+        status: 'Nihil (Belum Ada Omzet Kena Pajak)'
       };
-    } else if (taxPeriod === 'THIS_MONTH') {
-      const omzet = 24500000;
-      const total = Math.round(omzet * 0.005);
-      return {
-        omzet: omzet,
-        totalTax: total,
-        paidTax: total,
-        pendingTax: 0,
-        status: 'Lunas (e-Billing DJP Terbit)'
-      };
-    } else if (taxPeriod === 'LAST_MONTH') {
-      const omzet = 22400000;
+    } else if (taxPeriod === 'THIS_MONTH' || taxPeriod === 'LAST_MONTH') {
+      const omzet = Math.round(liveRevenue / 12);
       const total = Math.round(omzet * 0.005);
       return {
         omzet: omzet,
@@ -453,11 +430,10 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         status: 'Lunas Disetor'
       };
     } else {
-      const omzet = sakEmkmReport?.incomeStatement.revenue ?? 184525000;
-      const total = Math.round(omzet * 0.005);
+      const total = Math.round(liveRevenue * 0.005);
       const paid = Math.round(total * 0.5);
       return {
-        omzet: omzet,
+        omzet: liveRevenue,
         totalTax: total,
         paidTax: paid,
         pendingTax: total - paid,
@@ -468,7 +444,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
   // 6. Computed Perbandingan Komposisi Biaya
   const computedCostComp = useMemo(() => {
-    if (costCompPeriod === '2025') {
+    if (costCompPeriod === '2025' || dbTotalExpenses === 0) {
       return [
         { dep: 'HPP', val: 'Rp 0', h: 5 },
         { dep: 'Gaji', val: 'Rp 0', h: 5 },
@@ -476,24 +452,6 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         { dep: 'Listrik', val: 'Rp 0', h: 5 },
         { dep: 'Kemasan', val: 'Rp 0', h: 5 },
         { dep: 'Pajak', val: 'Rp 0', h: 5 }
-      ];
-    } else if (costCompPeriod === 'THIS_MONTH') {
-      return [
-        { dep: 'HPP', val: 'Rp 14.8 Jt', h: 90 },
-        { dep: 'Gaji', val: 'Rp 4.5 Jt', h: 42 },
-        { dep: 'Sewa', val: 'Rp 1.2 Jt', h: 22 },
-        { dep: 'Listrik', val: 'Rp 650 Rb', h: 14 },
-        { dep: 'Kemasan', val: 'Rp 365 Rb', h: 10 },
-        { dep: 'Pajak', val: 'Rp 122 Rb', h: 6 }
-      ];
-    } else if (costCompPeriod === 'LAST_MONTH') {
-      return [
-        { dep: 'HPP', val: 'Rp 15.2 Jt', h: 92 },
-        { dep: 'Gaji', val: 'Rp 4.5 Jt', h: 42 },
-        { dep: 'Sewa', val: 'Rp 1.2 Jt', h: 22 },
-        { dep: 'Listrik', val: 'Rp 900 Rb', h: 16 },
-        { dep: 'Kemasan', val: 'Rp 450 Rb', h: 12 },
-        { dep: 'Pajak', val: 'Rp 112 Rb', h: 6 }
       ];
     } else {
       const cogsM = (dbCogs / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 });
@@ -503,15 +461,15 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
       const kemasM = (dbKemasan / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 });
       const pjkM = (dbPajakPP55 / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 });
       return [
-        { dep: 'HPP', val: `Rp ${cogsM} Jt`, h: 95 },
-        { dep: 'Gaji', val: `Rp ${gajiM} Jt`, h: 45 },
-        { dep: 'Sewa', val: `Rp ${sewaM} Jt`, h: 22 },
-        { dep: 'Listrik', val: `Rp ${utilM} Jt`, h: 25 },
-        { dep: 'Kemasan', val: `Rp ${kemasM} Jt`, h: 12 },
+        { dep: 'HPP', val: `Rp ${cogsM} Jt`, h: Math.min(95, Math.max(10, Math.round((dbCogs / dbTotalExpenses) * 100))) },
+        { dep: 'Gaji', val: `Rp ${gajiM} Jt`, h: Math.min(95, Math.max(10, Math.round((dbGaji / dbTotalExpenses) * 100))) },
+        { dep: 'Sewa', val: `Rp ${sewaM} Jt`, h: Math.min(95, Math.max(10, Math.round((dbSewa / dbTotalExpenses) * 100))) },
+        { dep: 'Listrik', val: `Rp ${utilM} Jt`, h: Math.min(95, Math.max(10, Math.round((dbListrikAir / dbTotalExpenses) * 100))) },
+        { dep: 'Kemasan', val: `Rp ${kemasM} Jt`, h: Math.min(95, Math.max(10, Math.round((dbKemasan / dbTotalExpenses) * 100))) },
         { dep: 'Pajak', val: `Rp ${pjkM} Jt`, h: 6 }
       ];
     }
-  }, [costCompPeriod, dbCogs, dbGaji, dbSewa, dbListrikAir, dbKemasan, dbPajakPP55]);
+  }, [costCompPeriod, dbTotalExpenses, dbCogs, dbGaji, dbSewa, dbListrikAir, dbKemasan, dbPajakPP55]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1440px', margin: '0 auto' }}>

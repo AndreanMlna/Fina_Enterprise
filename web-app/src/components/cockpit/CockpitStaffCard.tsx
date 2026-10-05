@@ -13,11 +13,7 @@ export const CockpitStaffCard: React.FC<CockpitStaffCardProps> = ({
   onNavigate,
   onSelectStaffMode
 }) => {
-  const displayStaff = staffList.length > 0 ? staffList : [
-    { id: 'st-1', full_name: 'Andrean Maulana', role: 'OWNER' as const, is_active: true, phone_number: '081234567890', tenant_id: '' },
-    { id: 'st-2', full_name: 'Budi Santoso', role: 'MANAGER' as const, is_active: true, phone_number: '081298765432', tenant_id: '' },
-    { id: 'st-3', full_name: 'Siti Rahma', role: 'CASHIER' as const, is_active: true, phone_number: '081377889900', tenant_id: '' }
-  ];
+  const displayStaff = staffList;
 
   return (
     <div className="homies-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column' }}>
@@ -48,7 +44,7 @@ export const CockpitStaffCard: React.FC<CockpitStaffCardProps> = ({
         </span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
           <span className="mono" style={{ fontSize: '1.40rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1 }}>
-            {staffList.length > 0 ? staffList.length : 3}
+            {staffList.length}
           </span>
           <span style={{ fontSize: '0.70rem', color: 'var(--mint-neon)', fontWeight: 600 }}>
             Staf Aktif
@@ -71,16 +67,16 @@ export const CockpitStaffCard: React.FC<CockpitStaffCardProps> = ({
         {/* Bar 1: Permanent */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', width: '30%' }}>
           <span className="mono" style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--mint-neon)' }}>
-            {staffList.length > 0 ? staffList.length : 3}
+            {staffList.length}
           </span>
           <div style={{
             width: '100%',
-            height: '40px',
-            background: 'var(--mint-neon)',
+            height: staffList.length > 0 ? '40px' : '12px',
+            background: staffList.length > 0 ? 'var(--mint-neon)' : '#1A2433',
             borderRadius: '6px',
-            boxShadow: '0 0 10px var(--mint-glow)'
+            boxShadow: staffList.length > 0 ? '0 0 10px var(--mint-glow)' : 'none'
           }} />
-          <span style={{ fontSize: '0.66rem', color: 'var(--mint-neon)', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.66rem', color: staffList.length > 0 ? 'var(--mint-neon)' : '#64748B', fontWeight: 600 }}>
             Tetap
           </span>
         </div>
@@ -151,7 +147,12 @@ export const CockpitStaffCard: React.FC<CockpitStaffCardProps> = ({
           className="table-scroll-container"
           style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '135px', overflowY: 'auto' }}
         >
-          {displayStaff.map((member, idx) => {
+          {displayStaff.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.74rem' }}>
+              Belum ada staf terdaftar.
+            </div>
+          ) : (
+            displayStaff.map((member, idx) => {
             const cleanName = member.full_name ? member.full_name.replace(/\s*\(.*?\)/g, '') : 'Staf';
             const initials = cleanName
               ? cleanName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
@@ -229,7 +230,8 @@ export const CockpitStaffCard: React.FC<CockpitStaffCardProps> = ({
                 </div>
               </div>
             );
-          })}
+          })
+        )}
         </div>
 
         {/* Card Footer Link */}

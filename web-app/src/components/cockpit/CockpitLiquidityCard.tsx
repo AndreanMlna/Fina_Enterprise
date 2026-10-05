@@ -29,11 +29,11 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
                 fontFamily: 'var(--font-display)',
                 letterSpacing: '-0.02em'
               }}>
-                +70,3%
+                {kpi.liquidCash > 0 ? '+70,3%' : '0,0%'}
               </span>
             </div>
             <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
-              Efisiensi Arus Kas & Likuiditas
+              {kpi.liquidCash > 0 ? 'Efisiensi Arus Kas & Likuiditas' : 'Belum Ada Arus Kas Berjalan'}
             </div>
           </div>
 
@@ -119,7 +119,7 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
             <span style={{ fontSize: '0.62rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Cadangan</span>
           </div>
           <div className="mono" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap' }}>
-            {kpi.safetyBuffer > 0 ? (kpi.safetyBuffer >= 1000000 ? `${(kpi.safetyBuffer / 1000000).toFixed(0)}M` : `${(kpi.safetyBuffer / 1000).toFixed(0)}K`) : '50M'}
+            {kpi.safetyBuffer > 0 ? (kpi.safetyBuffer >= 1000000 ? `${(kpi.safetyBuffer / 1000000).toFixed(0)}M` : `${(kpi.safetyBuffer / 1000).toFixed(0)}K`) : 'Rp 0'}
           </div>
           <div 
             onClick={() => onNavigate('ledger')}
@@ -137,7 +137,7 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
             <span style={{ fontSize: '0.62rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Runway</span>
           </div>
           <div className="mono" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap' }}>
-            {kpi.cashRunwayDays > 0 ? `${(kpi.cashRunwayDays / 30).toFixed(1)} bln` : '14.2 bln'}
+            {kpi.cashRunwayDays > 0 ? `${(kpi.cashRunwayDays / 30).toFixed(1)} bln` : '0 bln'}
           </div>
           <div 
             onClick={() => onNavigate('montecarlo')}
@@ -155,7 +155,7 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
             <span style={{ fontSize: '0.62rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Rasio</span>
           </div>
           <div className="mono" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap' }}>
-            1.85x
+            {kpi.liquidCash > 0 ? '1.85x' : '0.0x'}
           </div>
           <div 
             onClick={() => onNavigate('cockpit')}
@@ -173,7 +173,7 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
             <span style={{ fontSize: '0.62rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Margin</span>
           </div>
           <div className="mono" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap' }}>
-            6.5%
+            {kpi.totalRevenue && kpi.totalRevenue > 0 ? '6.5%' : '0.0%'}
           </div>
           <div 
             onClick={() => onNavigate('b2b_benchmark')}
@@ -193,7 +193,7 @@ export const CockpitLiquidityCard: React.FC<CockpitLiquidityCardProps> = ({ kpi,
           <div className="mono" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap' }}>
             {kpi.estimatedTaxPP55 > 0 
               ? (kpi.estimatedTaxPP55 >= 1000000 ? `Rp ${(kpi.estimatedTaxPP55 / 1000000).toFixed(1)}Jt` : `Rp ${(kpi.estimatedTaxPP55 / 1000).toFixed(0)}Rb`)
-              : 'Rp 923Rb'}
+              : 'Rp 0'}
           </div>
           <div 
             onClick={() => onNavigate('ledger')}

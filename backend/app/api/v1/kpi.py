@@ -107,7 +107,7 @@ async def get_kpi_dashboard(
         health_ratio = total_assets / total_liabilities
         health_index = min(100, max(0, health_ratio * 20))
     else:
-        health_index = 95.0 if total_assets > 0 else 50.0
+        health_index = 95.0 if total_assets > 0 else 0.0
 
     margin_leakage = admin_expenses * 0.15
     tax_pp55 = total_revenue * 0.005 if total_revenue < 500_000_000 else total_revenue * 0.01

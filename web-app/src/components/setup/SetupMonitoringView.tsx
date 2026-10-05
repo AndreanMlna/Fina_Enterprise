@@ -22,8 +22,8 @@ export const SetupMonitoringView: React.FC<SetupMonitoringViewProps> = ({
   onNavigate,
   onSetupComplete
 }) => {
-  const initialEq = setupStatus.initial_equity || 91355200;
-  const currentAssets = setupStatus.current_total_assets || 140105000;
+  const initialEq = setupStatus.initial_equity ?? 0;
+  const currentAssets = setupStatus.current_total_assets ?? initialEq;
   const growthPercent = initialEq > 0 ? (((currentAssets - initialEq) / initialEq) * 100).toFixed(1) : '0';
 
   return (
@@ -132,7 +132,7 @@ export const SetupMonitoringView: React.FC<SetupMonitoringViewProps> = ({
             </div>
           </div>
           <div className="mono" style={{ fontSize: '1.35rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '4px' }}>
-            {formatCurrency(setupStatus.initial_cash_bank || 49605200)}
+            {formatCurrency(setupStatus.initial_cash_bank ?? 0)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
             Saldo kas di laci kasir & rekening usaha
@@ -148,7 +148,7 @@ export const SetupMonitoringView: React.FC<SetupMonitoringViewProps> = ({
             </div>
           </div>
           <div className="mono" style={{ fontSize: '1.35rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '4px' }}>
-            {formatCurrency(setupStatus.initial_fixed_assets || 53000000)}
+            {formatCurrency(setupStatus.initial_fixed_assets ?? 0)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
             Peralatan toko, etalase, dan kendaraan operasional
@@ -167,7 +167,7 @@ export const SetupMonitoringView: React.FC<SetupMonitoringViewProps> = ({
             {formatCurrency(currentAssets)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#34D399', fontWeight: 600 }}>
-            ↑ +{growthPercent}% pertumbuhan dari modal awal
+            {initialEq > 0 ? `↑ +${growthPercent}% pertumbuhan dari modal awal` : 'Modal awal terdaftar'}
           </div>
         </div>
       </div>
@@ -195,28 +195,28 @@ export const SetupMonitoringView: React.FC<SetupMonitoringViewProps> = ({
             <div className="homies-card-inner" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Nomor Jurnal Pembukuan</span>
               <span className="mono" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#FFFFFF' }}>
-                {setupStatus.journal_entry_number || 'JV-2026-01-OB-001-9CDA0C7D'}
+                {setupStatus.journal_entry_number || '-'}
               </span>
             </div>
 
             <div className="homies-card-inner" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Tanggal Efektif Pembukaan</span>
               <span className="mono" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#FFFFFF' }}>
-                {setupStatus.initial_date || '2026-01-01'}
+                {setupStatus.initial_date || '-'}
               </span>
             </div>
 
             <div className="homies-card-inner" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Aktivitas Jurnal Berjalan</span>
               <span className="mono" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mint-neon)' }}>
-                {setupStatus.total_journals_count || 22} Jurnal Transaksi
+                {setupStatus.total_journals_count ?? 0} Jurnal Transaksi
               </span>
             </div>
 
             <div className="homies-card-inner" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>SHA-256 Merkle Chain Hash:</span>
               <span className="mono" style={{ fontSize: '0.72rem', color: '#38bdf8', wordBreak: 'break-all' }}>
-                {setupStatus.audit_merkle_hash || '7acc7cc825c64afb61361c1fc7d3fbaf89e77cae3b83376679b1e9e8321bad2e'}
+                {setupStatus.audit_merkle_hash || 'sha256:merkle-genesis'}
               </span>
             </div>
           </div>
