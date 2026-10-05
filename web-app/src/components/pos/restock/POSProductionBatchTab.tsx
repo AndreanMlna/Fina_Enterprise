@@ -15,10 +15,10 @@ interface POSProductionBatchTabProps {
   products: POSProduct[];
   selectedFinishedProductId: string;
   setSelectedFinishedProductId: (val: string) => void;
-  batchQuantity: number;
-  setBatchQuantity: (val: number) => void;
-  batchOverheadCost: number;
-  setBatchOverheadCost: (val: number) => void;
+  batchQuantity: number | '';
+  setBatchQuantity: (val: number | '') => void;
+  batchOverheadCost: number | '';
+  setBatchOverheadCost: (val: number | '') => void;
   paymentMethod?: 'CASH' | 'BANK';
   setPaymentMethod?: (val: 'CASH' | 'BANK') => void;
   batchNotes: string;
@@ -135,10 +135,19 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
               Kuantitas Batch Dihasilkan (Pcs)
             </label>
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              placeholder="1"
               value={batchQuantity}
-              onChange={(e) => setBatchQuantity(parseInt(e.target.value, 10) || 1)}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                if (raw === '') {
+                  setBatchQuantity('');
+                  return;
+                }
+                const cleaned = raw.replace(/^0+(?=\d)/, '');
+                setBatchQuantity(cleaned === '' ? '' : parseInt(cleaned, 10));
+              }}
               style={{
                 width: '100%',
                 padding: '10px 14px',
@@ -157,11 +166,19 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
               Biaya Overhead Langsung Batch (Rp)
             </label>
             <input
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
+              placeholder="0 (LPG, listrik, dll.)"
               value={batchOverheadCost}
-              onChange={(e) => setBatchOverheadCost(parseFloat(e.target.value) || 0)}
-              placeholder="Gas LPG, listrik, tenaga harian..."
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                if (raw === '') {
+                  setBatchOverheadCost('');
+                  return;
+                }
+                const cleaned = raw.replace(/^0+(?=\d)/, '');
+                setBatchOverheadCost(cleaned === '' ? '' : parseInt(cleaned, 10));
+              }}
               style={{
                 width: '100%',
                 padding: '10px 14px',
@@ -229,7 +246,7 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Layers size={16} color="var(--mint-neon)" />
               <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#ffffff' }}>
-                Daftar Kebutuhan Bahan Baku (Bill of Materials) untuk {batchQuantity} Pcs
+                Daftar Kebutuhan Bahan Baku (Bill of Materials) untuk {batchQuantity || 0} Pcs
               </span>
             </div>
 

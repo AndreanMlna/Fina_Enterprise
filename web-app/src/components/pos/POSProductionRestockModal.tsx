@@ -49,9 +49,9 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialName, setMaterialName] = useState<string>('');
   const [materialCategory, setMaterialCategory] = useState<string>('Bahan Baku');
-  const [quantityAdded, setQuantityAdded] = useState<number>(10);
+  const [quantityAdded, setQuantityAdded] = useState<number | string>(10);
   const [unit, setUnit] = useState<string>('Kg');
-  const [purchasePricePerUnit, setPurchasePricePerUnit] = useState<number>(15000);
+  const [purchasePricePerUnit, setPurchasePricePerUnit] = useState<number | ''>(15000);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BANK'>('CASH');
   const [supplierName, setSupplierName] = useState<string>('');
   const [restockNotes, setRestockNotes] = useState<string>('');
@@ -62,8 +62,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 
   // --- Form State: Produksi Batch ---
   const [selectedFinishedProductId, setSelectedFinishedProductId] = useState<string>('');
-  const [batchQuantity, setBatchQuantity] = useState<number>(25);
-  const [batchOverheadCost, setBatchOverheadCost] = useState<number>(15000);
+  const [batchQuantity, setBatchQuantity] = useState<number | ''>(25);
+  const [batchOverheadCost, setBatchOverheadCost] = useState<number | ''>(15000);
   const [batchNotes, setBatchNotes] = useState<string>('');
 
   const [isLoadingRecipe, setIsLoadingRecipe] = useState<boolean>(false);
@@ -129,6 +129,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
         setMaterialCategory(first.category || 'Bahan Baku');
         if (first.cogs && first.cogs > 0) {
           setPurchasePricePerUnit(first.cogs);
+        } else {
+          setPurchasePricePerUnit('');
         }
       }
     }
@@ -153,13 +155,15 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
         setMaterialCategory(selected.category || 'Bahan Baku');
         if (selected.cogs && selected.cogs > 0) {
           setPurchasePricePerUnit(selected.cogs);
+        } else {
+          setPurchasePricePerUnit('');
         }
       }
     } else if (selectedMaterialId === '__NEW__') {
       setMaterialName('');
       setMaterialCategory('Bahan Baku');
       setUnit('Kg');
-      setPurchasePricePerUnit(10000);
+      setPurchasePricePerUnit('');
     }
   }, [selectedMaterialId, displayMaterials, allMaterialCatalog]);
 
@@ -218,8 +222,9 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
     let allSufficient = true;
     let totalMaterialCost = 0;
 
+    const numBatchQty = Number(batchQuantity) || 0;
     const items = recipeData.items.map(item => {
-      const requiredTotal = Number((item.quantity_required * batchQuantity).toFixed(4));
+      const requiredTotal = Number((item.quantity_required * numBatchQty).toFixed(4));
       // Cari produk bahan baku di katalog untuk cek stok fisik saat ini
       const matchedProd = item.material_id ? allMaterialCatalog.find(p => p.id === item.material_id) : allMaterialCatalog.find(p => p.name.toLowerCase() === item.material_name.toLowerCase());
       const availableStock = matchedProd ? matchedProd.stock : 0;
@@ -241,7 +246,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
     const wastageMultiplier = 1 / (1 - ((recipeData.wastage_percent || 0) / 100));
     const adjustedMaterialCost = totalMaterialCost * wastageMultiplier;
     const totalBatchCost = adjustedMaterialCost + (Number(batchOverheadCost) || 0);
-    const estimatedBatchHppPerUnit = batchQuantity > 0 ? Math.round(totalBatchCost / batchQuantity) : 0;
+    const estimatedBatchHppPerUnit = numBatchQty > 0 ? Math.round(totalBatchCost / numBatchQty) : 0;
 
     return {
       hasRecipe: true,
@@ -259,7 +264,9 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       setRestockError('Nama bahan baku wajib diisi.');
       return;
     }
-    if (quantityAdded <= 0 || purchasePricePerUnit <= 0) {
+    const numQty = Number(quantityAdded) || 0;
+    const numPrice = Number(purchasePricePerUnit) || 0;
+    if (numQty <= 0 || numPrice <= 0) {
       setRestockError('Kuantitas restock dan harga beli faktur harus bernilai lebih dari 0.');
       return;
     }
@@ -271,9 +278,9 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       product_id: selectedMaterialId && selectedMaterialId !== '__NEW__' ? selectedMaterialId : undefined,
       material_name: materialName.trim(),
       category: materialCategory.trim() || 'Bahan Baku',
-      quantity_added: Number(quantityAdded),
+      quantity_added: numQty,
       unit: unit.trim() || 'Kg',
-      purchase_price_per_unit: Number(purchasePricePerUnit),
+      purchase_price_per_unit: numPrice,
       payment_method: paymentMethod,
       supplier_name: supplierName.trim() || undefined,
       notes: restockNotes.trim() || undefined
@@ -299,7 +306,8 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
       setProductionError('Pilih produk jadi yang akan diproduksi.');
       return;
     }
-    if (batchQuantity <= 0) {
+    const numBatchQty = Number(batchQuantity) || 0;
+    if (numBatchQty <= 0) {
       setProductionError('Jumlah kuantitas batch harus bernilai lebih dari 0 unit.');
       return;
     }
@@ -309,7 +317,7 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 
     const payload: ProductionBatchPayload = {
       product_id: selectedFinishedProductId,
-      quantity_produced: Number(batchQuantity),
+      quantity_produced: numBatchQty,
       overhead_cost: Number(batchOverheadCost) || 0,
       payment_method: paymentMethod,
       notes: batchNotes.trim() || undefined

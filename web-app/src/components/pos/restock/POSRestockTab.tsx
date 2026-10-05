@@ -20,12 +20,12 @@ interface POSRestockTabProps {
   setMaterialName: (val: string) => void;
   materialCategory: string;
   setMaterialCategory: (val: string) => void;
-  quantityAdded: number;
-  setQuantityAdded: (val: number) => void;
+  quantityAdded: number | string;
+  setQuantityAdded: (val: number | string) => void;
   unit: string;
   setUnit: (val: string) => void;
-  purchasePricePerUnit: number;
-  setPurchasePricePerUnit: (val: number) => void;
+  purchasePricePerUnit: number | '';
+  setPurchasePricePerUnit: (val: number | '') => void;
   paymentMethod: 'CASH' | 'BANK';
   setPaymentMethod: (val: 'CASH' | 'BANK') => void;
   supplierName: string;
@@ -164,11 +164,24 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               Kuantitas Ditambahkan
             </label>
             <input
-              type="number"
-              step="any"
-              min="0.01"
+              type="text"
+              inputMode="decimal"
+              placeholder="1"
               value={quantityAdded}
-              onChange={(e) => setQuantityAdded(parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                let raw = e.target.value.replace(/[^0-9.]/g, '');
+                const parts = raw.split('.');
+                if (parts.length > 2) raw = `${parts[0]}.${parts.slice(1).join('')}`;
+                if (raw === '') {
+                  setQuantityAdded('');
+                } else if (raw === '.') {
+                  setQuantityAdded('0.');
+                } else {
+                  // Hilangkan angka 0 di depan jika bukan 0.xxx (misal: "05" -> "5")
+                  const cleaned = raw.replace(/^0+(?=\d)/, '');
+                  setQuantityAdded(cleaned);
+                }
+              }}
               required
               style={{
                 width: '100%',
@@ -210,10 +223,20 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
               Harga Beli Satuan Faktur Terkini (Rp)
             </label>
             <input
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
+              placeholder="0"
               value={purchasePricePerUnit}
-              onChange={(e) => setPurchasePricePerUnit(parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                if (raw === '') {
+                  setPurchasePricePerUnit('');
+                } else {
+                  // Otomatis hilangkan angka 0 di awal (misal: "02000" menjadi 2000)
+                  const cleaned = raw.replace(/^0+(?=\d)/, '');
+                  setPurchasePricePerUnit(cleaned === '' ? '' : Number(cleaned));
+                }
+              }}
               required
               style={{
                 width: '100%',
@@ -323,7 +346,7 @@ export const POSRestockTab: React.FC<POSRestockTabProps> = ({
             <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '10px 14px', borderRadius: '8px' }}>
               <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Restock Masuk</div>
               <div className="mono" style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--cyan-400)', marginTop: '2px' }}>
-                +{quantityAdded} {unit} @ {formatCurrency(purchasePricePerUnit)}
+                +{quantityAdded || 0} {unit} @ {formatCurrency(Number(purchasePricePerUnit) || 0)}
               </div>
             </div>
 
