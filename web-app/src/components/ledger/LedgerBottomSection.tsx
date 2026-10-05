@@ -19,6 +19,7 @@ export interface CostCompItem {
 interface LedgerBottomSectionProps {
   cashFlowYear: string;
   selectedYear: string;
+  liveCash: number;
   dbGaji: number;
   dbCogs: number;
   dbSewa: number;
@@ -38,6 +39,7 @@ interface LedgerBottomSectionProps {
 export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
   cashFlowYear,
   selectedYear,
+  liveCash,
   dbGaji,
   dbCogs,
   dbSewa,
@@ -53,6 +55,15 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
   onCostCompPeriodChange,
   computedCostComp
 }) => {
+  // Helper pencegah pembagian dengan nol (Anti-NaN% Guard)
+  const calcExpensePct = (amount: number): { pct: string; track: number } => {
+    if (selectedYear === '2025' || dbTotalExpenses <= 0 || amount <= 0) {
+      return { pct: '0%', track: 0 };
+    }
+    const ratio = Math.round((amount / dbTotalExpenses) * 100);
+    return { pct: `${ratio}%`, track: Math.min(ratio, 100) };
+  };
+
   return (
     <>
       {/* Third Row: Payroll Spending, Budget Allocation, Recent Transactions */}
@@ -66,7 +77,11 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#FFFFFF' }}>Alokasi Gaji & Upah</span>
             <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              {cashFlowYear === '2025' ? 'Tidak ada data 2025' : `Rata-rata Rp ${(dbGaji / 8 / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Jt/bln`}
+              {cashFlowYear === '2025'
+                ? 'Tidak ada data 2025'
+                : (dbGaji === 0
+                    ? 'Rp 0 Jt/bln (Belum ada beban gaji)'
+                    : `Rata-rata Rp ${(dbGaji / 8 / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Jt/bln`)}
             </span>
           </div>
 
@@ -78,7 +93,7 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
             ].map((col) => {
               const isCurrentMonth = col.m === 'Sep' && cashFlowYear === '2026';
               const isFutureMonth = ['Oct', 'Nov', 'Dec'].includes(col.m) && cashFlowYear === '2026';
-              const heightVal = cashFlowYear === '2025' ? 4 : col.h;
+              const heightVal = (cashFlowYear === '2025' || dbGaji === 0) ? 4 : col.h;
               return (
                 <div key={col.m} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%' }}>
                   <div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -86,16 +101,18 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
                       width: '100%',
                       maxWidth: '18px',
                       height: `${Math.max(heightVal, 4)}%`,
-                      background: isCurrentMonth ? 'var(--mint-neon)' : (isFutureMonth ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 223, 143, 0.6)'),
+                      background: dbGaji === 0
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : (isCurrentMonth ? 'var(--mint-neon)' : (isFutureMonth ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 223, 143, 0.6)')),
                       borderRadius: '4px 4px 0 0',
-                      boxShadow: isCurrentMonth ? '0 0 10px var(--mint-glow)' : 'none',
+                      boxShadow: (isCurrentMonth && dbGaji > 0) ? '0 0 10px var(--mint-glow)' : 'none',
                       transition: 'height 0.3s ease'
                     }} />
                   </div>
                   <span style={{ 
                     fontSize: '0.62rem', 
-                    color: isCurrentMonth ? 'var(--mint-neon)' : '#64748B',
-                    fontWeight: isCurrentMonth ? 700 : 400,
+                    color: (isCurrentMonth && dbGaji > 0) ? 'var(--mint-neon)' : '#64748B',
+                    fontWeight: (isCurrentMonth && dbGaji > 0) ? 700 : 400,
                     marginTop: '8px'
                   }}>
                     {col.m}
@@ -115,12 +132,42 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             {[
-              { title: 'HPP & Pasokan', amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbCogs), pct: selectedYear === '2025' ? '0%' : `${Math.round((dbCogs / dbTotalExpenses) * 100)}%`, track: selectedYear === '2025' ? 0 : Math.round((dbCogs / dbTotalExpenses) * 100) },
-              { title: 'Cadangan Kas', amount: selectedYear === '2025' ? 'Rp 0' : 'Rp 25.000.000', pct: selectedYear === '2025' ? '0%' : '15%', track: selectedYear === '2025' ? 0 : 45 },
-              { title: 'Gaji Karyawan', amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbGaji), pct: selectedYear === '2025' ? '0%' : `${Math.round((dbGaji / dbTotalExpenses) * 100)}%`, track: selectedYear === '2025' ? 0 : 35 },
-              { title: 'Sewa & Toko', amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbSewa), pct: selectedYear === '2025' ? '0%' : `${Math.round((dbSewa / dbTotalExpenses) * 100)}%`, track: selectedYear === '2025' ? 0 : 20 },
-              { title: 'Pajak PP 55', amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbPajakPP55), pct: selectedYear === '2025' ? '0%' : '1%', track: selectedYear === '2025' ? 0 : 12 },
-              { title: 'Operasional', amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbKemasan), pct: selectedYear === '2025' ? '0%' : `${Math.round((dbKemasan / dbTotalExpenses) * 100)}%`, track: selectedYear === '2025' ? 0 : 15 }
+              {
+                title: 'HPP & Pasokan',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbCogs),
+                pct: calcExpensePct(dbCogs).pct,
+                track: calcExpensePct(dbCogs).track
+              },
+              {
+                title: 'Cadangan Kas',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(liveCash),
+                pct: selectedYear === '2025' ? '0%' : (liveCash > 0 ? (dbTotalExpenses > 0 ? `${Math.round((liveCash / (liveCash + dbTotalExpenses)) * 100)}%` : '100% Likuid') : '0%'),
+                track: selectedYear === '2025' ? 0 : (liveCash > 0 ? (dbTotalExpenses > 0 ? Math.min(100, Math.round((liveCash / (liveCash + dbTotalExpenses)) * 100)) : 100) : 0)
+              },
+              {
+                title: 'Gaji Karyawan',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbGaji),
+                pct: calcExpensePct(dbGaji).pct,
+                track: calcExpensePct(dbGaji).track
+              },
+              {
+                title: 'Sewa & Toko',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbSewa),
+                pct: calcExpensePct(dbSewa).pct,
+                track: calcExpensePct(dbSewa).track
+              },
+              {
+                title: 'Pajak PP 55',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbPajakPP55),
+                pct: selectedYear === '2025' ? '0%' : (dbPajakPP55 > 0 ? '0.5%' : '0%'),
+                track: selectedYear === '2025' ? 0 : (dbPajakPP55 > 0 ? 5 : 0)
+              },
+              {
+                title: 'Operasional',
+                amount: selectedYear === '2025' ? 'Rp 0' : formatCurrency(dbKemasan),
+                pct: calcExpensePct(dbKemasan).pct,
+                track: calcExpensePct(dbKemasan).track
+              }
             ].map((b) => (
               <div key={b.title}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '2px' }}>
@@ -151,47 +198,70 @@ export const LedgerBottomSection: React.FC<LedgerBottomSectionProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {(vouchers.length > 0 ? vouchers.slice(0, 5).map(v => {
-              const isExp = v.creditAccount.includes('Kas') || v.description.toLowerCase().includes('bayar') || v.description.toLowerCase().includes('beli');
-              return {
-                date: v.date ? new Date(v.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : 'Hari ini',
-                desc: v.description,
-                type: isExp ? 'Expense' : 'Income',
-                amount: `${isExp ? '-' : '+'}${formatCurrency(v.amount)}`,
-                status: v.reconciled ? 'Verified' : 'Pending'
-              };
-            }) : [
-              { date: '28 Sep', desc: 'Penjualan Kasir POS #00129', type: 'Income', amount: '+Rp 450.000', status: 'Verified' },
-              { date: '28 Sep', desc: 'Pembelian Grosir Bahan Baku #00128', type: 'Expense', amount: '-Rp 1.250.000', status: 'Verified' },
-              { date: '27 Sep', desc: 'Pelunasan Piutang Toko Sinar #00127', type: 'Income', amount: '+Rp 850.000', status: 'Verified' },
-              { date: '27 Sep', desc: 'Kas Kecil Warung & Box #00126', type: 'Expense', amount: '-Rp 375.000', status: 'Verified' },
-              { date: '26 Sep', desc: 'Setoran PPh Final PP 55 #00125', type: 'Expense', amount: '-Rp 225.000', status: 'Verified' }
-            ]).map((trx, idx) => (
-              <div key={idx} style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 0',
-                borderBottom: idx < 4 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
-                fontSize: '0.75rem'
-              }}>
-                <span style={{ color: '#64748B', width: '55px', fontSize: '0.70rem' }}>{trx.date}</span>
-                <span style={{ color: '#FFFFFF', flex: 1, padding: '0 8px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={trx.desc}>{trx.desc}</span>
-                <span style={{
-                  color: trx.type === 'Income' ? 'var(--mint-neon)' : '#F87171',
-                  fontSize: '0.70rem',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: trx.type === 'Income' ? 'rgba(0, 223, 143, 0.1)' : 'rgba(248, 113, 113, 0.1)',
-                  marginRight: '8px'
+            {vouchers.length > 0 ? (
+              vouchers.slice(0, 5).map(v => {
+                const descLower = v.description.toLowerCase();
+                const isEquity = descLower.includes('saldo awal') || descLower.includes('modal') || v.creditAccount.includes('Modal') || v.creditAccount.includes('3101');
+                const isExp = !isEquity && (v.creditAccount.includes('Kas') || descLower.includes('bayar') || descLower.includes('beli') || descLower.includes('beban'));
+                
+                let typeLabel = 'Income';
+                let badgeBg = 'rgba(0, 223, 143, 0.1)';
+                let badgeColor = 'var(--mint-neon)';
+                let sign = '+';
+
+                if (isEquity) {
+                  typeLabel = 'Modal';
+                  badgeBg = 'rgba(56, 189, 248, 0.1)';
+                  badgeColor = '#38BDF8';
+                  sign = '+';
+                } else if (isExp) {
+                  typeLabel = 'Expense';
+                  badgeBg = 'rgba(248, 113, 113, 0.1)';
+                  badgeColor = '#F87171';
+                  sign = '-';
+                }
+
+                return {
+                  id: v.id,
+                  date: v.date ? new Date(v.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : 'Hari ini',
+                  desc: v.description,
+                  type: typeLabel,
+                  badgeBg,
+                  badgeColor,
+                  amount: `${sign}${formatCurrency(v.amount)}`,
+                  status: v.reconciled ? 'Verified' : 'Pending'
+                };
+              }).map((trx, idx) => (
+                <div key={trx.id || idx} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 0',
+                  borderBottom: idx < 4 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
+                  fontSize: '0.75rem'
                 }}>
-                  {trx.type}
-                </span>
-                <span className="mono" style={{ color: '#FFFFFF', fontWeight: 600, width: '100px', textAlign: 'right' }}>
-                  {trx.amount}
-                </span>
+                  <span style={{ color: '#64748B', width: '55px', fontSize: '0.70rem' }}>{trx.date}</span>
+                  <span style={{ color: '#FFFFFF', flex: 1, padding: '0 8px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={trx.desc}>{trx.desc}</span>
+                  <span style={{
+                    color: trx.badgeColor,
+                    fontSize: '0.70rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: trx.badgeBg,
+                    marginRight: '8px'
+                  }}>
+                    {trx.type}
+                  </span>
+                  <span className="mono" style={{ color: '#FFFFFF', fontWeight: 600, width: '100px', textAlign: 'right' }}>
+                    {trx.amount}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: '#64748B', fontSize: '0.82rem' }}>
+                Belum ada transaksi atau jurnal yang tercatat.
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

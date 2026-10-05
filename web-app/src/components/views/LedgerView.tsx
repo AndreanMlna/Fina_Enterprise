@@ -384,12 +384,29 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     };
   }, [selectedYear, dbTotalExpenses, dbCogs, dbGaji]);
 
+  // Agregasi Saldo Kas & Bank Riil (Mencakup Akun Kas 1101 & Bank 1102 SAK EMKM)
+  const liveCash = useMemo(() => {
+    // 1. Ambil dari seluruh akun Kas & Bank pada Aset Lancar SAK EMKM
+    const emkmCash = (sakEmkmReport?.assets.currentAssets || [])
+      .filter(a => a.name.toLowerCase().includes('kas') || a.name.toLowerCase().includes('bank'))
+      .reduce((sum, a) => sum + (a.amount || 0), 0);
+    
+    if (emkmCash > 0) return emkmCash;
+
+    // 2. Fallback: kalkulasi dari mutasi kas vouchers jika laporan SAK EMKM belum termuat
+    let voucherCash = 0;
+    vouchers.forEach(v => {
+      const isDebitCash = v.debitAccount.toLowerCase().includes('kas') || v.debitAccount.toLowerCase().includes('bank');
+      const isCreditCash = v.creditAccount.toLowerCase().includes('kas') || v.creditAccount.toLowerCase().includes('bank');
+      if (isDebitCash && !isCreditCash) voucherCash += v.amount;
+      else if (!isDebitCash && isCreditCash) voucherCash -= v.amount;
+    });
+
+    return Math.max(0, voucherCash);
+  }, [sakEmkmReport, vouchers]);
+
   // 4. Computed Cash Flow Overview
   const computedCashFlow = useMemo(() => {
-    const liveCash = sakEmkmReport?.assets.currentAssets.find(a => 
-      a.name.toLowerCase().includes('kas') || a.name.toLowerCase().includes('bank')
-    )?.amount ?? 0;
-
     if (cashFlowYear === '2025' || liveCash === 0) {
       return {
         balance: liveCash,
@@ -402,10 +419,10 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         balance: liveCash,
         balanceLabel: 'Saldo Kas & Bank: ',
         pathD: "M 0 70 Q 50 30 100 60 T 200 40 T 260 20 T 300 45",
-        status: 'Tren Arus Kas Positif (+14.2% YTD)'
+        status: 'Likuiditas Tersedia (Arus Kas Terverifikasi)'
       };
     }
-  }, [cashFlowYear, sakEmkmReport]);
+  }, [cashFlowYear, liveCash]);
 
   // 5. Computed Ringkasan Pajak UMKM (PP 55)
   const computedTaxSummary = useMemo(() => {
@@ -606,6 +623,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
           <LedgerBottomSection
             cashFlowYear={cashFlowYear}
             selectedYear={selectedYear}
+            liveCash={liveCash}
             dbGaji={dbGaji}
             dbCogs={dbCogs}
             dbSewa={dbSewa}
