@@ -240,7 +240,11 @@ class RealAIService:
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     if res and res.text:
-                        return json.loads(res.text)
+                        parsed = json.loads(res.text)
+                        if isinstance(parsed, list) and parsed:
+                            return parsed[0]
+                        if isinstance(parsed, dict):
+                            return parsed
                 except Exception as e:
                     logger.warning(f"[RealAIService] Gemini Vision OCR gagal dengan model '{model_name}': {e}")
         except Exception as e:
@@ -273,7 +277,9 @@ class RealAIService:
 
         # 3. Analisis penglihatan multimodal Gemini jika ada gambar & API key
         gemini_ocr_notes = self._inspect_receipt_image_vision(image_bytes)
-        if gemini_ocr_notes and gemini_ocr_notes.get("tampered"):
+        if isinstance(gemini_ocr_notes, list) and gemini_ocr_notes:
+            gemini_ocr_notes = gemini_ocr_notes[0]
+        if isinstance(gemini_ocr_notes, dict) and gemini_ocr_notes.get("tampered"):
             is_tampered = True
             ela_score = min(ela_score, 35)
             details += f" | Gemini Vision: {gemini_ocr_notes.get('reason')}"
@@ -322,7 +328,11 @@ class RealAIService:
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     if res and res.text:
-                        return json.loads(res.text)
+                        parsed = json.loads(res.text)
+                        if isinstance(parsed, list) and parsed:
+                            return parsed[0]
+                        if isinstance(parsed, dict):
+                            return parsed
                 except Exception as err:
                     logger.warning(f"[RealAIService] Vision verifikasi transfer gagal model {model_name}: {err}")
         except Exception as e:
@@ -410,6 +420,7 @@ class RealAIService:
             f"Keterlambatan: {days_overdue} hari\n"
             f"Tone/Gaya Bahasa: {tone}\n"
             f"Link Pembayaran QRIS: {snap_url}\n"
+            f"PENTING: Selalu panggil pelanggan dengan nama lengkap persis '{customer_name}' tanpa menyingkat atau mengubahnya.\n"
             "Tolong buatkan teks pesan WhatsApp (maksimal 3 paragraf pendek, sertakan emoji yang relevan)."
         )
 
@@ -700,6 +711,13 @@ class RealAIService:
                 cogs_data=cogs_data,
                 product_name=product_name
             )
+        else:
+            # Standarisasi awalan tag peringatan finansial SAK EMKM pada ringkasan eksekutif
+            summary_txt = str(ai_response.get("ai_executive_summary", ""))
+            if cogs_data["margin_status"] == "CRITICAL_LOSS" and "PERINGATAN KRITIS" not in summary_txt:
+                ai_response["ai_executive_summary"] = f"PERINGATAN KRITIS: {summary_txt}"
+            elif cogs_data["margin_status"] == "MARGIN_LEAKAGE" and "MARGIN BOCOR" not in summary_txt:
+                ai_response["ai_executive_summary"] = f"WASPADA MARGIN BOCOR: {summary_txt}"
 
         return {
             "product_name": product_name,

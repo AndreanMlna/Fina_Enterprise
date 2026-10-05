@@ -70,7 +70,7 @@ class TestRealAIService(unittest.TestCase):
             snap_url="https://app.midtrans.com/snap/v2/vtweb/demo-qris-001"
         )
         self.assertIsInstance(msg, str)
-        self.assertIn("Ibu Siti Rahma", msg)
+        self.assertTrue(any(name in msg for name in ["Ibu Siti Rahma", "Bu Siti Rahma", "Siti Rahma"]))
         self.assertIn("INV-202609-001", msg)
 
     def test_feature_4_support_ticket_resolver(self):

@@ -22,10 +22,21 @@ from app.domain.services.inventory_service import (
     inventory_service
 )
 
+from app.domain.services.pos_service import (
+    POSService,
+    pos_service,
+    PP55_FINAL_TAX_RATE,
+    NON_SALEABLE_CATEGORIES
+)
+
 __all__ = [
     "AccountingService",
     "InventoryService",
     "inventory_service",
+    "POSService",
+    "pos_service",
+    "PP55_FINAL_TAX_RATE",
+    "NON_SALEABLE_CATEGORIES",
     "COA_CASH_ON_HAND",
     "COA_BANK_GIRO_QRIS",
     "COA_ACCOUNTS_RECEIVABLE",

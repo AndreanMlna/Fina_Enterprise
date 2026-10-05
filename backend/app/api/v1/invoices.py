@@ -7,7 +7,7 @@ Security: JWT Bearer token, Tenant-scoped isolation (RBAC)
 Compliance: SAK EMKM Double-Entry Balancing & UU PDP No. 27/2022
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone
 import uuid
 import hashlib
@@ -93,6 +93,68 @@ class VerifyTransferProofResponse(BaseModel):
     tamper_details: Optional[str] = None
 
 
+# --- Invoice Domain Helpers ---
+
+def _determine_invoice_status_and_tone(
+    due_date_str: str,
+    now: datetime
+) -> Tuple[int, InvoiceStatus, DunningTone]:
+    """Menghitung selisih hari keterlambatan dan menentukan status serta tone penagihan awal."""
+    try:
+        due_dt = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+        today = now.date()
+        days_diff = (today - due_dt).days
+        days_overdue = max(0, days_diff)
+    except Exception:
+        days_overdue = 0
+
+    if days_overdue > 30:
+        inv_status = InvoiceStatus.OVERDUE_30
+        tone = DunningTone.FORMAL_URGENT
+    elif days_overdue > 14:
+        inv_status = InvoiceStatus.OVERDUE_15
+        tone = DunningTone.REMINDER
+    else:
+        inv_status = InvoiceStatus.CURRENT
+        tone = DunningTone.FRIENDLY
+
+    return days_overdue, inv_status, tone
+
+
+async def _settle_invoice_payment(
+    db: AsyncSession,
+    tenant_id: str,
+    inv: Invoice,
+    debit_account_code: str,
+    description: str,
+    memo_debit: str,
+    memo_credit: str,
+    entry_number_prefix: str = "JV-AR"
+) -> JournalEntry:
+    """
+    Melunasi invoice dan memposting jurnal berpasangan SAK EMKM (ACID):
+    Debet: Kas / Bank, Kredit: Piutang Usaha.
+    """
+    amount = float(inv.amount)
+    journal_entry = await AccountingService.post_double_entry(
+        db=db,
+        tenant_id=tenant_id,
+        description=description,
+        debit_account_code=debit_account_code,
+        credit_account_code=COA_ACCOUNTS_RECEIVABLE,
+        amount=amount,
+        memo_debit=memo_debit,
+        memo_credit=memo_credit,
+        entry_number_prefix=entry_number_prefix,
+        update_account_balances=True
+    )
+
+    inv.status = InvoiceStatus.PAID
+    inv.days_overdue = 0
+    await db.commit()
+    return journal_entry
+
+
 # --- Endpoints ---
 
 @router.get(
@@ -162,26 +224,7 @@ async def create_invoice(
     rand_seq = uuid.uuid4().hex[:4].upper()
     invoice_number = f"INV-{now.strftime('%Y%m')}-{rand_seq}"
 
-    # Hitung selisih jatuh tempo
-    try:
-        due_dt = datetime.strptime(payload.due_date, "%Y-%m-%d").date()
-        today = now.date()
-        days_diff = (today - due_dt).days
-        days_overdue = max(0, days_diff)
-    except Exception:
-        days_overdue = 0
-
-    # Tentukan status awal
-    if days_overdue > 30:
-        inv_status = InvoiceStatus.OVERDUE_30
-        tone = DunningTone.FORMAL_URGENT
-    elif days_overdue > 14:
-        inv_status = InvoiceStatus.OVERDUE_15
-        tone = DunningTone.REMINDER
-    else:
-        inv_status = InvoiceStatus.CURRENT
-        tone = DunningTone.FRIENDLY
-
+    days_overdue, inv_status, tone = _determine_invoice_status_and_tone(payload.due_date, now)
     snap_url = payload.snap_qris_url or f"https://app.midtrans.com/snap/v2/vtweb/fina-ar-{invoice_number.lower()}"
 
     new_inv = Invoice(
@@ -256,27 +299,16 @@ async def pay_invoice(
         )
 
     target_cash_code = COA_CASH_ON_HAND if payload.payment_method.upper() == "CASH" else COA_BANK_GIRO_QRIS
-    amount = float(inv.amount)
-
-    # Delegasikan auto-posting jurnal SAK EMKM ke Accounting Domain Service
-    journal_entry = await AccountingService.post_double_entry(
+    journal_entry = await _settle_invoice_payment(
         db=db,
         tenant_id=current_user.tenant_id,
-        description=f"Pelunasan Piutang Invoice {inv.invoice_number} - {inv.customer_name} ({payload.payment_method.upper()})",
+        inv=inv,
         debit_account_code=target_cash_code,
-        credit_account_code=COA_ACCOUNTS_RECEIVABLE,
-        amount=amount,
+        description=f"Pelunasan Piutang Invoice {inv.invoice_number} - {inv.customer_name} ({payload.payment_method.upper()})",
         memo_debit=f"Penerimaan Pelunasan Invoice {inv.invoice_number}",
         memo_credit=f"Pengurangan Piutang Invoice {inv.invoice_number}",
-        entry_number_prefix="JV-AR",
-        update_account_balances=True
+        entry_number_prefix="JV-AR"
     )
-
-    # Update invoice status
-    inv.status = InvoiceStatus.PAID
-    inv.days_overdue = 0
-
-    await db.commit()
 
     return {
         "success": True,
@@ -284,7 +316,7 @@ async def pay_invoice(
         "invoice_id": inv.id,
         "journal_entry_number": journal_entry.entry_number,
         "audit_merkle_hash": journal_entry.audit_merkle_hash,
-        "amount_settled": amount
+        "amount_settled": float(inv.amount)
     }
 
 
@@ -464,23 +496,16 @@ async def verify_transfer_proof(
         )
 
     # Jika lolos uji forensik dan asli: Bukukan langsung ke buku besar SAK EMKM (ACID)
-    journal_entry = await AccountingService.post_double_entry(
+    journal_entry = await _settle_invoice_payment(
         db=db,
         tenant_id=current_user.tenant_id,
-        description=f"Pelunasan Transfer m-Banking ({verification['bank_name']}) Invoice {inv.invoice_number} - {inv.customer_name}",
+        inv=inv,
         debit_account_code=COA_BANK_GIRO_QRIS,
-        credit_account_code=COA_ACCOUNTS_RECEIVABLE,
-        amount=expected_amount,
+        description=f"Pelunasan Transfer m-Banking ({verification['bank_name']}) Invoice {inv.invoice_number} - {inv.customer_name}",
         memo_debit=f"Penerimaan Transfer Bank Rekening {verification['bank_name']} Ref {verification['reference_number']}",
         memo_credit=f"Pelunasan Piutang Usaha Invoice {inv.invoice_number}",
-        entry_number_prefix="JV-AR-TRF",
-        update_account_balances=True
+        entry_number_prefix="JV-AR-TRF"
     )
-
-    # Tandai Invoice sebagai LUNAS
-    inv.status = InvoiceStatus.PAID
-    inv.days_overdue = 0
-    await db.commit()
 
     return VerifyTransferProofResponse(
         success=True,

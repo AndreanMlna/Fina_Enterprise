@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import re
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -157,6 +157,90 @@ class LoginResponse(BaseModel):
     tenant: TenantSummarySchema
 
 
+# --- Auth Domain Helpers ---
+
+def _build_login_response(user: UserCredential, tenant: Optional[Tenant]) -> LoginResponse:
+    """Membangun JWT Signed Access Token dan DTO LoginResponse resmi."""
+    tenant_name = tenant.name if tenant else ""
+    token_payload = {
+        "sub": user.id,
+        "phone_number": user.phone_number,
+        "role": user.role,
+        "tenant_id": user.tenant_id,
+        "tenant_name": tenant_name
+    }
+    access_token = create_access_token(token_payload)
+
+    user_profile = UserProfileSchema(
+        id=user.id,
+        phone_number=user.phone_number,
+        full_name=user.full_name,
+        role=user.role,
+        tenant_id=user.tenant_id,
+        is_active=user.is_active,
+        last_login_at=user.last_login_at
+    )
+
+    tenant_summary = TenantSummarySchema(
+        id=tenant.id if tenant else user.tenant_id,
+        name=tenant.name if tenant else "FINA Enterprise UMKM",
+        branch_code=tenant.branch_code if tenant else "ID-UMKM-0001",
+        active_license=tenant.active_license if tenant else "UMKM_GROWTH",
+        address=tenant.address if tenant else None,
+        npwp=tenant.npwp if tenant else None,
+        is_setup_complete=bool(getattr(tenant, "is_setup_complete", False)) if tenant else False
+    )
+
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=user_profile,
+        tenant=tenant_summary
+    )
+
+
+async def _create_tenant_and_owner(
+    db: AsyncSession,
+    payload: RegisterRequest,
+    raw_phone: str
+) -> Tuple[Tenant, UserCredential]:
+    """Membuat entitas Tenant baru beserta akun kredensial pertama dengan peran OWNER."""
+    tenant_id = f"t-{uuid.uuid4().hex[:8]}"
+    clean_biz_code = re.sub(r"[^A-Za-z0-9]", "", payload.business_name).upper()[:8]
+    if not clean_biz_code:
+        clean_biz_code = "UMKM"
+    branch_code = f"ID-{clean_biz_code}-{uuid.uuid4().hex[:4].upper()}"
+
+    new_tenant = Tenant(
+        id=tenant_id,
+        name=payload.business_name.strip(),
+        branch_code=branch_code,
+        npwp="00.000.000.0-000.000",
+        address=payload.address.strip(),
+        active_license="UMKM_GROWTH"
+    )
+    db.add(new_tenant)
+    await db.flush()
+
+    user_id = f"usr-{uuid.uuid4().hex[:8]}"
+    hashed_pin = hash_pin(payload.pin)
+
+    new_user = UserCredential(
+        id=user_id,
+        tenant_id=tenant_id,
+        phone_number=raw_phone,
+        pin_hash=hashed_pin,
+        role="OWNER",
+        full_name=payload.full_name.strip(),
+        is_active=True,
+        failed_attempts=0,
+        last_login_at=datetime.now(timezone.utc)
+    )
+    db.add(new_user)
+    await db.commit()
+    return new_tenant, new_user
+
+
 # --- Security Dependency: Current Authenticated User ---
 async def get_current_user(
     auth_creds: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
@@ -303,42 +387,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
-    # Terbitkan JWT Access Token
-    token_payload = {
-        "sub": user.id,
-        "phone_number": user.phone_number,
-        "role": user.role,
-        "tenant_id": user.tenant_id,
-        "tenant_name": user.tenant.name if user.tenant else ""
-    }
-    access_token = create_access_token(token_payload)
-
-    user_profile = UserProfileSchema(
-        id=user.id,
-        phone_number=user.phone_number,
-        full_name=user.full_name,
-        role=user.role,
-        tenant_id=user.tenant_id,
-        is_active=user.is_active,
-        last_login_at=user.last_login_at
-    )
-
-    tenant_summary = TenantSummarySchema(
-        id=user.tenant.id,
-        name=user.tenant.name,
-        branch_code=user.tenant.branch_code,
-        active_license=user.tenant.active_license,
-        address=user.tenant.address,
-        npwp=user.tenant.npwp,
-        is_setup_complete=bool(getattr(user.tenant, "is_setup_complete", False))
-    )
-
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=user_profile,
-        tenant=tenant_summary
-    )
+    return _build_login_response(user, user.tenant)
 
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED, summary="Registrasi Akun Bisnis & Pengusaha UMKM Baru")
@@ -378,121 +427,17 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
             detail="Nomor WhatsApp ini sudah terdaftar sebagai akun aktif. Silakan masuk menggunakan nomor tersebut."
         )
 
-    # 1. Buat Entitas Bisnis Baru (Tenant)
-    tenant_id = f"t-{uuid.uuid4().hex[:8]}"
-    clean_biz_code = re.sub(r"[^A-Za-z0-9]", "", payload.business_name).upper()[:8]
-    if not clean_biz_code:
-        clean_biz_code = "UMKM"
-    branch_code = f"ID-{clean_biz_code}-{uuid.uuid4().hex[:4].upper()}"
-
-    new_tenant = Tenant(
-        id=tenant_id,
-        name=payload.business_name.strip(),
-        branch_code=branch_code,
-        npwp="00.000.000.0-000.000",
-        address=payload.address.strip(),
-        active_license="UMKM_GROWTH"
-    )
-    db.add(new_tenant)
-    await db.flush()
-
-    # 2. Buat Kredensial Pengguna Baru (UserCredential)
-    user_id = f"usr-{uuid.uuid4().hex[:8]}"
-    hashed_pin = hash_pin(payload.pin)
-
-    new_user = UserCredential(
-        id=user_id,
-        tenant_id=tenant_id,
-        phone_number=raw_phone,
-        pin_hash=hashed_pin,
-        role="OWNER",
-        full_name=payload.full_name.strip(),
-        is_active=True,
-        failed_attempts=0,
-        last_login_at=datetime.now(timezone.utc)
-    )
-    db.add(new_user)
-    await db.commit()
-
-    # 3. Terbitkan Signed JWT Access Token Resmi
-    token_payload = {
-        "sub": new_user.id,
-        "phone_number": new_user.phone_number,
-        "role": new_user.role,
-        "tenant_id": new_user.tenant_id,
-        "tenant_name": new_tenant.name
-    }
-    access_token = create_access_token(token_payload)
-
-    user_profile = UserProfileSchema(
-        id=new_user.id,
-        phone_number=new_user.phone_number,
-        full_name=new_user.full_name,
-        role=new_user.role,
-        tenant_id=new_user.tenant_id,
-        is_active=new_user.is_active,
-        last_login_at=new_user.last_login_at
-    )
-
-    tenant_summary = TenantSummarySchema(
-        id=new_tenant.id,
-        name=new_tenant.name,
-        branch_code=new_tenant.branch_code,
-        active_license=new_tenant.active_license,
-        address=new_tenant.address,
-        npwp=new_tenant.npwp,
-        is_setup_complete=bool(getattr(new_tenant, "is_setup_complete", False))
-    )
-
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=user_profile,
-        tenant=tenant_summary
-    )
+    # Buat Entitas Bisnis & Kredensial Owner
+    new_tenant, new_user = await _create_tenant_and_owner(db, payload, raw_phone)
+    return _build_login_response(new_user, new_tenant)
 
 
 @router.get("/me", response_model=LoginResponse, summary="Verifikasi Sesi & Ambil Profil Pengguna Saat Ini")
 async def get_my_profile(current_user: UserCredential = Depends(get_current_user)):
-
     """
     Mengambil data profil pengguna dan identitas tenant terdaftar berdasarkan JWT Token aktif.
     """
-    token_payload = {
-        "sub": current_user.id,
-        "phone_number": current_user.phone_number,
-        "role": current_user.role,
-        "tenant_id": current_user.tenant_id,
-        "tenant_name": current_user.tenant.name if current_user.tenant else ""
-    }
-    fresh_token = create_access_token(token_payload)
-
-    user_profile = UserProfileSchema(
-        id=current_user.id,
-        phone_number=current_user.phone_number,
-        full_name=current_user.full_name,
-        role=current_user.role,
-        tenant_id=current_user.tenant_id,
-        is_active=current_user.is_active,
-        last_login_at=current_user.last_login_at
-    )
-
-    tenant_summary = TenantSummarySchema(
-        id=current_user.tenant.id,
-        name=current_user.tenant.name,
-        branch_code=current_user.tenant.branch_code,
-        active_license=current_user.tenant.active_license,
-        address=current_user.tenant.address,
-        npwp=current_user.tenant.npwp,
-        is_setup_complete=bool(getattr(current_user.tenant, "is_setup_complete", False))
-    )
-
-    return LoginResponse(
-        access_token=fresh_token,
-        token_type="bearer",
-        user=user_profile,
-        tenant=tenant_summary
-    )
+    return _build_login_response(current_user, current_user.tenant)
 
 
 # --- Enterprise Staff Management Endpoints (RBAC Provisioning) ---
