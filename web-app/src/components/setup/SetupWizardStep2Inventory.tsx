@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import type { InventoryItemPayload } from '../../services/types';
+import type { InventoryItemPayload, FinishedProductPayload } from '../../services/types';
 import { SetupStep2CashBar } from './step2/SetupStep2CashBar';
 import { SetupStep2AIAssistant } from './step2/SetupStep2AIAssistant';
 import { SetupStep2ItemsTable } from './step2/SetupStep2ItemsTable';
@@ -25,7 +25,8 @@ interface SetupWizardStep2InventoryProps {
   availableCash?: number;
   deductFromCash?: boolean;
   setDeductFromCash?: (val: boolean) => void;
-  onApplyAISupplies?: (items: InventoryItemPayload[]) => void;
+  onApplyAISupplies?: (items: InventoryItemPayload[], finishedProducts?: FinishedProductPayload[]) => void;
+  finishedProducts?: FinishedProductPayload[];
 }
 
 export const SetupWizardStep2Inventory: React.FC<SetupWizardStep2InventoryProps> = ({
@@ -39,16 +40,21 @@ export const SetupWizardStep2Inventory: React.FC<SetupWizardStep2InventoryProps>
   deductFromCash = true,
   setDeductFromCash,
   onApplyAISupplies,
+  finishedProducts = [],
 }) => {
   const [targetMargin, setTargetMargin] = useState<number>(40);
 
   // Terapkan rekomendasi AI ke daftar item
-  const handleApplyAIRecommendation = (mappedItems: InventoryItemPayload[], replaceExisting: boolean) => {
+  const handleApplyAIRecommendation = (
+    mappedItems: InventoryItemPayload[],
+    replaceExisting: boolean,
+    finished?: FinishedProductPayload[]
+  ) => {
     if (!onApplyAISupplies) return;
     if (replaceExisting) {
-      onApplyAISupplies(mappedItems);
+      onApplyAISupplies(mappedItems, finished);
     } else {
-      onApplyAISupplies([...inventoryItems, ...mappedItems]);
+      onApplyAISupplies([...inventoryItems, ...mappedItems], finished);
     }
   };
 
@@ -124,6 +130,39 @@ export const SetupWizardStep2Inventory: React.FC<SetupWizardStep2InventoryProps>
         setTargetMargin={setTargetMargin}
         onApplyRecommendation={handleApplyAIRecommendation}
       />
+
+      {/* Indikator Katalog Produk Siap Jual di POS Kasir */}
+      {finishedProducts && finishedProducts.length > 0 && (
+        <div
+          style={{
+            background: 'rgba(56, 189, 248, 0.05)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+            fontSize: '0.74rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.90rem' }}>🏷️</span>
+            <div>
+              <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                {finishedProducts.length} Produk Jadi Siap Jual
+              </span>
+              <span style={{ color: '#94a3b8', marginLeft: '6px' }}>
+                akan otomatis aktif di fitur Kasir POS: {finishedProducts.slice(0, 3).map(f => f.name).join(', ')}{finishedProducts.length > 3 ? '...' : ''}
+              </span>
+            </div>
+          </div>
+          <span style={{ color: '#38BDF8', fontWeight: 700, fontSize: '0.70rem' }}>
+            Etalase POS Otomatis Sesuai
+          </span>
+        </div>
+      )}
 
       {/* 3. Toolbar & Tabel Daftar Bahan & Alat Usaha */}
       <SetupStep2ItemsTable

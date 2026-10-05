@@ -7,7 +7,7 @@ import {
   PackageCheck,
   Plus
 } from 'lucide-react';
-import type { InventoryItemPayload, SetupAIRecommendationResponse } from '../../../services/types';
+import type { InventoryItemPayload, SetupAIRecommendationResponse, FinishedProductPayload } from '../../../services/types';
 import { setupService } from '../../../services/modules/setupService';
 import { formatCurrency } from '../../../utils';
 
@@ -15,7 +15,11 @@ interface SetupStep2AIAssistantProps {
   availableCash: number;
   targetMargin: number;
   setTargetMargin: (val: number) => void;
-  onApplyRecommendation: (items: InventoryItemPayload[], replaceExisting: boolean) => void;
+  onApplyRecommendation: (
+    items: InventoryItemPayload[],
+    replaceExisting: boolean,
+    finishedProducts?: FinishedProductPayload[]
+  ) => void;
 }
 
 export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
@@ -28,19 +32,20 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<SetupAIRecommendationResponse | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'supplies' | 'pos_catalog'>('pos_catalog');
 
   const QUICK_PROMPTS = [
-    { label: '☕ Kopi & Minuman', prompt: 'Kedai kopi susu kekinian dan teh dingin' },
-    { label: '🍜 Warmindo', prompt: 'Warung warmindo mie instan, telur, dan minuman' },
-    { label: '🍗 Ayam Geprek', prompt: 'Usaha ayam geprek sambal dan nasi uduk' },
-    { label: '🧺 Laundry', prompt: 'Usaha laundry kiloan dan setrika uap' },
-    { label: '🛒 Toko Sembako', prompt: 'Toko sembako kebutuhan harian warga' },
+    { label: '🍗 Ayam & Lauk Marinasi', prompt: 'Usaha ayam marinasi, ikan marinasi serta aneka lauk marinasi siap masak' },
+    { label: '☕ Kedai Kopi & Minuman', prompt: 'Kedai kopi susu kekinian dan teh dingin segar' },
+    { label: '🧺 Jasa Laundry', prompt: 'Usaha jasa laundry kiloan dan setrika uap rapi' },
+    { label: '🛒 Toko Sembako', prompt: 'Toko sembako dan kelontong kebutuhan harian warga' },
+    { label: '🍜 Warmindo / Kuliner', prompt: 'Warung makan warmindo mie instan, telur, dan lauk santap' },
   ];
 
   const handleAskAI = async (queryText?: string) => {
     const textToQuery = queryText || aiPrompt;
     if (!textToQuery.trim()) {
-      setAiError('Ketik jenis usaha atau klik salah satu pilihan cepat di atas.');
+      setAiError('Ketik jenis usaha atau klik salah satu rekomendasi cepat di atas.');
       return;
     }
 
@@ -55,6 +60,8 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
       });
 
       setAiResult(res);
+      // Default langsung sorot katalog produk jualan POS agar user langsung melihat menu jualan kasirnya
+      setActiveTab('pos_catalog');
     } catch (err: any) {
       setAiError(err.message || 'Gagal memuat rekomendasi. Silakan coba kembali.');
     } finally {
@@ -74,7 +81,7 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
       selling_price: item.selling_price || item.recommended_selling_price || 0,
     }));
 
-    onApplyRecommendation(mappedItems, replaceExisting);
+    onApplyRecommendation(mappedItems, replaceExisting, aiResult.finished_products || aiResult.saleable_products);
   };
 
   const cleanSummary = useMemo(() => {
@@ -214,27 +221,45 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
         <div
           style={{
             background: 'rgba(0, 223, 143, 0.03)',
-            border: '1px solid rgba(0, 223, 143, 0.2)',
-            borderRadius: '8px',
-            padding: '12px 14px',
+            border: '1px solid rgba(0, 223, 143, 0.25)',
+            borderRadius: '10px',
+            padding: '14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px'
+            gap: '12px'
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          {/* Header Ringkasan & Tombol Aksi */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#FFFFFF' }}>
-                {cleanSummary || 'Rekomendasi Kebutuhan Usaha'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.80rem', fontWeight: 700, color: '#FFFFFF' }}>
+                  {cleanSummary || 'Rekomendasi Usaha Terintegrasi'}
+                </span>
+                {aiResult.business_model && (
+                  <span
+                    style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      color: '#38BDF8',
+                      border: '1px solid rgba(56, 189, 248, 0.3)'
+                    }}
+                  >
+                    {aiResult.business_model === 'PROCESSED_GOODS' ? 'PRODUK OLAHAN / KULINER' : aiResult.business_model === 'SERVICE' ? 'JASA LAYANAN' : 'DAGANG / RITEL'}
+                  </span>
+                )}
               </div>
               {aiResult.advice && (
-                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px', lineHeight: 1.3 }}>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', lineHeight: 1.35 }}>
                   {aiResult.advice}
                 </div>
               )}
             </div>
 
-            {/* Action Buttons */}
+            {/* Tombol Terapkan */}
             <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
               <button
                 type="button"
@@ -253,7 +278,7 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                <PackageCheck size={13} /> Terapkan ({aiResult.recommended_items.length} Item)
+                <PackageCheck size={13} /> Terapkan ke Usaha & POS
               </button>
               <button
                 type="button"
@@ -272,10 +297,126 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                <Plus size={13} /> Tambah
+                <Plus size={13} /> Gabung
               </button>
             </div>
           </div>
+
+          {/* Tab Selector: Menu Siap Jual di POS vs Belanja Bahan/Alat */}
+          <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '6px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('pos_catalog')}
+              style={{
+                background: activeTab === 'pos_catalog' ? 'rgba(0, 223, 143, 0.15)' : 'transparent',
+                border: activeTab === 'pos_catalog' ? '1px solid var(--mint-neon)' : '1px solid transparent',
+                color: activeTab === 'pos_catalog' ? 'var(--mint-neon)' : '#94a3b8',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.73rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              🏷️ Menu Jual di Kasir POS ({(aiResult.finished_products || aiResult.saleable_products || []).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('supplies')}
+              style={{
+                background: activeTab === 'supplies' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                border: activeTab === 'supplies' ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid transparent',
+                color: activeTab === 'supplies' ? '#FFFFFF' : '#94a3b8',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.73rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              📦 Belanja Bahan & Alat Modal ({aiResult.recommended_items.length})
+            </button>
+          </div>
+
+          {/* Konten Tab Aktif */}
+          {activeTab === 'pos_catalog' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
+                Item di bawah ini yang akan <strong>otomatis terdaftar di fitur POS Kasir</strong> siap dijual ke pelanggan:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '8px' }}>
+                {(aiResult.finished_products || aiResult.saleable_products || []).map((fp, fIdx) => (
+                  <div
+                    key={fIdx}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#FFFFFF' }}>{fp.name}</span>
+                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: '3px' }}>
+                        {fp.category}
+                      </span>
+                    </div>
+                    {fp.recipe_summary && (
+                      <div style={{ fontSize: '0.67rem', color: '#64748b', fontStyle: 'italic' }}>
+                        {fp.recipe_summary}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', fontSize: '0.70rem' }}>
+                      <span style={{ color: '#94a3b8' }}>HPP: {formatCurrency(fp.cogs || 0)}</span>
+                      <span style={{ color: 'var(--mint-neon)', fontWeight: 700 }}>
+                        Jual: {formatCurrency(fp.selling_price)} / {fp.unit || 'Pack'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
+                Daftar bahan baku, wadah kemasan, dan perlengkapan untuk <strong>mengurangi saldo modal kas awal</strong>:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px' }}>
+                {aiResult.recommended_items.map((it, iIdx) => (
+                  <div
+                    key={iIdx}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.04)',
+                      borderRadius: '6px',
+                      padding: '6px 8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '0.72rem'
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: '#FFFFFF', fontWeight: 500 }}>{it.name}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#64748b' }}>{it.category} • {it.quantity} {it.unit}</div>
+                    </div>
+                    <div style={{ color: '#FCD34D', fontWeight: 600 }}>
+                      {formatCurrency((it.unit_cost || it.estimated_unit_cost || 0) * (it.quantity || 1))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* AI Summary Breakdown */}
           <div
@@ -286,20 +427,20 @@ export const SetupStep2AIAssistant: React.FC<SetupStep2AIAssistantProps> = ({
               flexWrap: 'wrap',
               fontSize: '0.72rem',
               color: '#94a3b8',
-              paddingTop: '6px',
-              borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+              paddingTop: '8px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.06)'
             }}
           >
             <div>
-              Taksiran Modal: <strong className="mono" style={{ color: 'var(--mint-neon)' }}>{formatCurrency(aiResult.total_estimated_budget)}</strong>
+              Total Modal Belanja: <strong className="mono" style={{ color: '#FCD34D' }}>{formatCurrency(aiResult.total_estimated_budget)}</strong>
             </div>
             <div style={{ color: '#64748b' }}>•</div>
             <div>
-              Potensi Omzet: <strong className="mono" style={{ color: '#38BDF8' }}>{formatCurrency(aiResult.total_potential_revenue)}</strong>
+              Potensi Omzet Menu Kasir: <strong className="mono" style={{ color: '#38BDF8' }}>{formatCurrency(aiResult.total_potential_revenue)}</strong>
             </div>
             <div style={{ color: '#64748b' }}>•</div>
             <div>
-              Margin Sasaran: <strong className="mono" style={{ color: '#A78BFA' }}>+{aiResult.average_margin_percent}%</strong>
+              Target Margin: <strong className="mono" style={{ color: 'var(--mint-neon)' }}>+{aiResult.average_margin_percent}%</strong>
             </div>
           </div>
         </div>

@@ -819,7 +819,7 @@ class RealAIService:
         }
 
     # =========================================================================
-    # REKOMENDASI AI LLM UNTUK SETUP BAHAN & ALAT USAHA + HARGA JUAL ANTI-RUGI
+    # REKOMENDASI AI LLM UNTUK SETUP BAHAN/ALAT MODAL + KATALOG PRODUK POS JUAL
     # =========================================================================
     def recommend_startup_supplies_and_pricing(
         self,
@@ -828,9 +828,11 @@ class RealAIService:
         target_margin: float = 40.0
     ) -> Dict[str, Any]:
         """
-        Konsultasi & rekomendasi cerdas AI LLM untuk menentukan bahan-bahan, kemasan,
-        dan alat kerja yang dibutuhkan untuk memulai/menjalankan usaha UMKM,
-        lengkap dengan taksiran modal beli (HPP) dan kalkulasi harga jual anti-rugi.
+        Konsultasi & rekomendasi cerdas AI LLM untuk menentukan:
+        1. Kebutuhan Belanja Modal Awal: Bahan baku, kemasan, alat kerja, dan operasional (bukan untuk dijual di kasir).
+        2. Katalog Produk Siap Jual di POS Kasir: Menu/produk jadi olahan, paket jasa layanan, atau barang dagangan eceran
+           dengan kalkulasi HPP dan penetapan harga jual anti-rugi (Margin Protection).
+        Mendukung SEMUA MODEL USAHA UMKM: F&B/Olahan/Marinasi/Manufaktur, Jasa/Service, dan Dagang/Ritel.
         """
         clean_query = (query or "").strip()
         safe_margin = max(10.0, min(85.0, float(target_margin or 40.0)))
@@ -840,39 +842,53 @@ class RealAIService:
         if self.is_gemini_active and len(clean_query) >= 3:
             try:
                 sys_prompt = (
-                    "Anda adalah Principal AI Business Advisor & Accounting Specialist bersertifikasi SAK EMKM "
-                    "untuk UMKM Indonesia. Misi utama Anda adalah menyusun daftar belanja modal dan bahan operasional awal "
-                    "yang realistis serta memproteksi pemilik usaha dari kerugian penetapan harga (anti-rugi/margin leakage)."
+                    "Anda adalah Principal AI Business & Accounting Specialist bersertifikasi SAK EMKM "
+                    "untuk UMKM Indonesia. Misi Anda adalah menyusun perencanaan finansial dan operasional awal "
+                    "secara tepat dan profesional dengan membedakan DUA HAL POKOK:\n"
+                    "1. DAFTAR BELANJA MODAL AWAL (supplies_and_equipment): Bahan baku mentah, kemasan, alat kerja, dan energi operasional yang harus dibeli.\n"
+                    "2. DAFTAR PRODUK SIAP JUAL DI KASIR POS (finished_products): Menu atau produk jadi olahan atau jasa layanan yang ditawarkan ke konsumen akhir.\n\n"
+                    "PRINSIP KRITIS UNTUK SEGALA JENIS USAHA:\n"
+                    "- Usaha Olahan/F&B/Marinasi/Manufaktur (PROCESSED_GOODS): Bahan yang dibeli adalah daging mentah, bumbu, plastik vakum, gas elpiji, wadah box. DI KASIR POS yang dijual BUKAN wadah box/plastik/gas/bumbu mentah, melainkan PRODUK JADI seperti 'Ayam Marinasi Bumbu Kuning (1 Ekor)', 'Ikan Nila Marinasi Gurih', dll.\n"
+                    "- Usaha Jasa (SERVICE): Bahan yang dibeli adalah deterjen, setrika, pewangi. DI KASIR POS yang dijual adalah LAYANAN JASA seperti 'Cuci + Setrika (Kg)', 'Cuci Bedcover'.\n"
+                    "- Usaha Dagang/Ritel (RETAIL): Barang yang dibeli adalah sembako/barang kemasan eceran. DI KASIR POS yang dijual adalah barang dagangan tersebut. Alat kerja seperti timbangan atau kantong kresek TIDAK dijual di kasir."
                 )
                 user_prompt = (
-                    f"Pengguna ingin memulai atau menyusun kebutuhan operasional usaha berikut:\n"
+                    f"Pengguna ingin memulai atau menyusun operasional usaha:\n"
                     f"\"{clean_query}\"\n\n"
                     f"Parameter Finansial:\n"
                     f"- Estimasi Anggaran Belanja: {'Rp ' + f'{budget_estimate:,.0f}' if budget_estimate else 'Fleksibel / Sesuai Kebutuhan Efisien'}\n"
                     f"- Target Margin Laba Kotor Minimum: {safe_margin:.1f}%\n\n"
-                    f"Instruksi Khusus:\n"
-                    f"1. Buatkan 5 sampai 10 item bahan baku, kemasan, atau alat kerja esensial yang wajib dibeli.\n"
-                    f"2. Kelompokkan ke Kategori: 'Bahan Baku', 'Alat Kerja', 'Kemasan', 'Operasional', 'Makanan', 'Minuman', 'Sembako', atau 'Umum'.\n"
-                    f"3. Berikan satuan yang lazim di Indonesia ('Pcs', 'Kg', 'Liter', 'Pack', 'Box', 'Porsi', 'Karung', 'Set', 'Unit').\n"
-                    f"4. Taksir estimasi harga beli satuan grosir pasar Indonesia (HPP modal).\n"
-                    f"5. Untuk item yang diolah/dijual kembali, hitung 'recommended_selling_price' dengan target margin {safe_margin:.1f}% "
-                    f"   menggunakan formula: Harga Jual = Harga Beli / (1 - (Margin / 100)), bulatkan ke kelipatan Rp 500 terdekat. "
-                    f"   Jika item adalah alat kerja murni yang tidak dijual langsung, isi 0 pada 'recommended_selling_price'.\n"
-                    f"6. Jelaskan alasan spesifik pada 'reason' tentang fungsi item dan proteksi margin anti-rugi.\n\n"
-                    f"Format output HARUS berupa JSON valid tanpa markdown tambahan dengan struktur:\n"
+                    f"Instruksi:\n"
+                    f"1. Tentukan 'business_model': 'PROCESSED_GOODS' (olahan/kuliner/marinasi/manufaktur), 'SERVICE' (jasa), atau 'RETAIL' (toko/kelontong).\n"
+                    f"2. Buatkan 5-8 item 'suggested_items' (kebutuhan belanja bahan baku, kemasan, alat kerja, operasional). Taksir 'estimated_unit_cost' grosir pasar Indonesia. Pada alat kerja, kemasan, dan operasional, isi recommended_selling_price = 0.\n"
+                    f"3. Buatkan 3-6 item 'finished_products' (katalog produk/menu/jasa yang dijual di kasir POS). Taksir HPP (cogs) per unit dan hitung selling_price anti-rugi dengan target margin {safe_margin:.1f}%.\n"
+                    f"4. Format output HARUS berupa JSON valid tanpa markdown tambahan:\n"
                     f"{{\n"
-                    f'  "business_summary": "string ringkasan profil usaha dan estimasi kebutuhan awal",\n'
-                    f'  "pricing_strategy_notes": "string rekomendasi strategi penetapan harga agar tidak merugi",\n'
+                    f'  "business_model": "PROCESSED_GOODS",\n'
+                    f'  "business_summary": "string ringkasan profil usaha dan pemisahan belanja modal vs produk jualan",\n'
+                    f'  "pricing_strategy_notes": "string rekomendasi strategi penetapan harga anti-rugi",\n'
                     f'  "suggested_items": [\n'
                     f'    {{\n'
-                    f'      "name": "string nama bahan atau alat",\n'
-                    f'      "category": "string kategori",\n'
-                    f'      "quantity": 1,\n'
-                    f'      "unit": "Pcs",\n'
-                    f'      "estimated_unit_cost": 15000,\n'
-                    f'      "recommended_selling_price": 25000,\n'
+                    f'      "name": "string nama bahan mentah atau alat",\n'
+                    f'      "category": "Bahan Baku | Kemasan | Alat Kerja | Operasional",\n'
+                    f'      "quantity": 2,\n'
+                    f'      "unit": "Kg | Pcs | Pack | Liter | Unit",\n'
+                    f'      "estimated_unit_cost": 35000,\n'
+                    f'      "recommended_selling_price": 0,\n'
+                    f'      "target_margin_percent": 0,\n'
+                    f'      "reason": "string fungsi operasional modal awal"\n'
+                    f'    }}\n'
+                    f'  ],\n'
+                    f'  "finished_products": [\n'
+                    f'    {{\n'
+                    f'      "name": "string nama produk jadi atau menu siap jual di kasir POS",\n'
+                    f'      "category": "Makanan | Minuman | Lauk Olahan | Jasa | Sembako",\n'
+                    f'      "unit": "Pack | Porsi | Pcs | Kg | Layanan",\n'
+                    f'      "cogs": 25000,\n'
+                    f'      "selling_price": 42000,\n'
                     f'      "target_margin_percent": {safe_margin},\n'
-                    f'      "reason": "string justifikasi operasional & proteksi margin anti-rugi"\n'
+                    f'      "stock": 10,\n'
+                    f'      "recipe_summary": "string komposisi bahan pembentuk"\n'
                     f'    }}\n'
                     f'  ]\n'
                     f"}}"
@@ -906,97 +922,188 @@ class RealAIService:
                 raw = cost / max(0.1, (1.0 - (margin_pct / 100.0)))
                 return float(round(raw / 500) * 500)
 
-            if any(k in q_lower for k in ["kopi", "cafe", "coffee", "boba", "teh", "minuman"]):
-                summary = f"Rencana Kebutuhan Booth Minuman & Kopi untuk '{clean_query}'. Fokus pada bahan dasar konsumsi cepat dan perlengkapan saji higienis."
-                notes = f"Formula Anti-Rugi: Food cost minuman ideal berada di kisaran 25%-35% (Margin kotor {safe_margin:.0f}%+). Perhitungkan susut es batu dan sirup."
+            # Heuristik 1: Makanan Marinasi / Frozen Food / Lauk Olahan
+            if any(k in q_lower for k in ["marinasi", "frozen", "ikan", "ayam marinasi", "lauk", "olahan", "pre-cooked"]):
+                b_model = "PROCESSED_GOODS"
+                summary = f"Rencana Usaha Lauk Olahan & Marinasi Siap Masak '{clean_query}'. Memisahkan belanja modal (bahan mentah & kemasan vakum) dari produk jadi yang dijual di kasir."
+                notes = f"Formula Anti-Rugi: HPP produk marinasi mencakup bahan baku + bumbu racik + kemasan vakum/stiker + susut berat (10%). Patok margin {safe_margin:.0f}%+ agar menutup biaya listrik freezer dan penyimpanan dingin."
                 items = [
-                    {"name": "Biji Kopi Espresso Blend 1Kg", "category": "Bahan Baku", "quantity": 3, "unit": "Kg", "estimated_unit_cost": 85000, "recommended_selling_price": calc_price(85000 / 50, safe_margin), "target_margin_percent": safe_margin, "reason": "Bahan utama racikan 1kg menghasilkan ~50-60 cup americano/latte"},
-                    {"name": "Susu UHT Full Cream 1 Liter", "category": "Bahan Baku", "quantity": 12, "unit": "Liter", "estimated_unit_cost": 18500, "recommended_selling_price": calc_price(18500 / 6, safe_margin), "target_margin_percent": safe_margin, "reason": "Bahan baku latte/kopi susu, 1 liter untuk 5-6 cup"},
-                    {"name": "Gula Aren Cair Organik 1 Liter", "category": "Bahan Baku", "quantity": 3, "unit": "Liter", "estimated_unit_cost": 38000, "recommended_selling_price": calc_price(38000 / 30, safe_margin), "target_margin_percent": safe_margin, "reason": "Pemanis alami signature kopi susu gula aren"},
-                    {"name": "Cup Plastik Polypropylene 16oz + Lid", "category": "Kemasan", "quantity": 5, "unit": "Pack", "estimated_unit_cost": 24000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kemasan higienis tahan dingin (1 pack isi 50 cup)"},
-                    {"name": "Sedotan Steril Higienis", "category": "Kemasan", "quantity": 2, "unit": "Pack", "estimated_unit_cost": 12000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Pelengkap kemasan take away"},
-                    {"name": "Timbangan Digital Presisi 0.1g", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 75000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Penting menjaga konsistensi takaran gramasi agar tidak bocor modal"},
-                    {"name": "Jigger & Sendok Bar Stainless", "category": "Alat Kerja", "quantity": 1, "unit": "Set", "estimated_unit_cost": 45000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Alat ukur sirup dan cairan agar resep presisi"}
+                    {"name": "Ayam Potong Broiler Segar (Karkas)", "category": "Bahan Baku", "quantity": 10, "unit": "Kg", "estimated_unit_cost": 36000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan baku utama ayam marinasi, 1 kg menghasilkan 1-2 pack porsi"},
+                    {"name": "Ikan Nila / Gurame Segar Bersih", "category": "Bahan Baku", "quantity": 8, "unit": "Kg", "estimated_unit_cost": 34000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan baku ikan marinasi bumbu kuning/gurih"},
+                    {"name": "Bumbu Rempah Marinasi (Bawang, Kunyit, Ketumbar, Garam)", "category": "Bahan Baku", "quantity": 4, "unit": "Kg", "estimated_unit_cost": 28000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Racikan bumbu marinasi meresap siap olah"},
+                    {"name": "Plastik Vacuum / Ziploc Food Grade Tebal", "category": "Kemasan", "quantity": 4, "unit": "Pack", "estimated_unit_cost": 26000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kemasan kedap udara menjaga kualitas lauk marinasi tahan lama di freezer"},
+                    {"name": "Stiker Label Brand, Varian & Tanggal Produksi", "category": "Kemasan", "quantity": 3, "unit": "Pack", "estimated_unit_cost": 18000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Identitas merek dan informasi tanggal kedaluwarsa produk"},
+                    {"name": "Wadah Box Plastik / Container Marinasi Besar", "category": "Alat Kerja", "quantity": 2, "unit": "Pcs", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Wadah higienis saat proses perendaman bumbu sebelum divakum"},
+                    {"name": "Timbangan Digital Dapur Presisi", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 65000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Menjamin gramasi per kemasan pas sehingga modal tidak bocor"}
                 ]
+                finished = [
+                    {
+                        "name": "Ayam Marinasi Bumbu Spesial (1 Ekor / Pack)",
+                        "category": "Lauk Olahan",
+                        "unit": "Pack",
+                        "cogs": 38000,
+                        "selling_price": calc_price(38000, safe_margin),
+                        "target_margin_percent": safe_margin,
+                        "stock": 10,
+                        "recipe_summary": "Ayam broiler segar 1kg + racikan bumbu marinasi + plastik vacuum + stiker logo"
+                    },
+                    {
+                        "name": "Ikan Nila Marinasi Bumbu Kuning (500 gr)",
+                        "category": "Lauk Olahan",
+                        "unit": "Pack",
+                        "cogs": 24000,
+                        "selling_price": calc_price(24000, safe_margin),
+                        "target_margin_percent": safe_margin,
+                        "stock": 10,
+                        "recipe_summary": "Ikan nila bersih 500g + bumbu kuning rempah + plastik vacuum"
+                    },
+                    {
+                        "name": "Ayam Marinasi Spicy Pedas Manis (1 Ekor / Pack)",
+                        "category": "Lauk Olahan",
+                        "unit": "Pack",
+                        "cogs": 39500,
+                        "selling_price": calc_price(39500, safe_margin),
+                        "target_margin_percent": safe_margin,
+                        "stock": 8,
+                        "recipe_summary": "Ayam broiler 1kg + racikan saus spicy marinasi + kemasan vacuum"
+                    },
+                    {
+                        "name": "Paket Lauk Marinasi Tempe & Tahu Kuning (Pack Isi 10)",
+                        "category": "Lauk Olahan",
+                        "unit": "Pack",
+                        "cogs": 9000,
+                        "selling_price": calc_price(9000, safe_margin),
+                        "target_margin_percent": safe_margin,
+                        "stock": 15,
+                        "recipe_summary": "Tempe & tahu pilihan + bumbu bacem/kuning marinasi"
+                    }
+                ]
+
+            # Heuristik 2: Kafe / Minuman Kekinian / Kopi
+            elif any(k in q_lower for k in ["kopi", "cafe", "coffee", "boba", "teh", "minuman"]):
+                b_model = "PROCESSED_GOODS"
+                summary = f"Rencana Kedai Minuman & Kopi untuk '{clean_query}'. Memisahkan bahan racik dari menu cup siap saji di POS."
+                notes = f"Formula Anti-Rugi: Food cost minuman ideal di 25%-35% (Margin kotor {safe_margin:.0f}%+). Perhitungkan es batu, cup, dan susu."
+                items = [
+                    {"name": "Biji Kopi Espresso Blend 1Kg", "category": "Bahan Baku", "quantity": 3, "unit": "Kg", "estimated_unit_cost": 85000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan utama espresso, 1kg menghasilkan ~50 cup"},
+                    {"name": "Susu UHT Full Cream 1 Liter", "category": "Bahan Baku", "quantity": 12, "unit": "Liter", "estimated_unit_cost": 18500, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan dasar kopi susu, 1 liter untuk 5-6 cup"},
+                    {"name": "Gula Aren Cair Organik 1 Liter", "category": "Bahan Baku", "quantity": 3, "unit": "Liter", "estimated_unit_cost": 38000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Pemanis signature kopi susu gula aren"},
+                    {"name": "Cup Plastik 16oz + Lid Dome", "category": "Kemasan", "quantity": 5, "unit": "Pack", "estimated_unit_cost": 24000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Gelas saji dingin higienis"},
+                    {"name": "Sedotan Steril & Paper Bag", "category": "Kemasan", "quantity": 2, "unit": "Pack", "estimated_unit_cost": 12000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Pelengkap take away"},
+                    {"name": "Timbangan Digital Presisi 0.1g", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 75000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Menjaga takaran gramasi bubuk kopi"},
+                    {"name": "Jigger & Sendok Bar Stainless", "category": "Alat Kerja", "quantity": 1, "unit": "Set", "estimated_unit_cost": 45000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Takaran sirup agar konsisten"}
+                ]
+                finished = [
+                    {"name": "Kopi Susu Gula Aren (Ice 16oz)", "category": "Minuman", "unit": "Cup", "cogs": 6500, "selling_price": calc_price(6500, safe_margin), "target_margin_percent": safe_margin, "stock": 50, "recipe_summary": "Espresso shot + Susu UHT + Gula aren + Cup & Lid"},
+                    {"name": "Americano / Long Black (Ice 16oz)", "category": "Minuman", "unit": "Cup", "cogs": 3500, "selling_price": calc_price(3500, safe_margin), "target_margin_percent": safe_margin, "stock": 40, "recipe_summary": "Double shot espresso + Air mineral + Cup"},
+                    {"name": "Creamy Matcha Latte (Ice 16oz)", "category": "Minuman", "unit": "Cup", "cogs": 8000, "selling_price": calc_price(8000, safe_margin), "target_margin_percent": safe_margin, "stock": 30, "recipe_summary": "Matcha powder + Susu UHT + Sirup"}
+                ]
+
+            # Heuristik 3: Jasa Laundry
             elif any(k in q_lower for k in ["laundry", "cuci"]):
-                summary = f"Rencana Kebutuhan Jasa Laundry Kiloan & Satuan untuk '{clean_query}'."
-                notes = f"Formula Anti-Rugi: Biaya bahan kimia (deterjen + softener) berkisar Rp 800 - Rp 1.500 per kg pakaian. Patok harga jual minimal Rp 7.000 - Rp 9.000/kg."
+                b_model = "SERVICE"
+                summary = f"Rencana Usaha Jasa Laundry untuk '{clean_query}'. Memisahkan bahan sabun operasional dari tarif layanan jasa di POS kasir."
+                notes = f"Formula Anti-Rugi: Biaya bahan kimia dan listrik rata-rata Rp 1.500 - Rp 2.000/kg. Patok tarif minimal Rp 7.000 - Rp 9.000/kg untuk margin sehat."
                 items = [
-                    {"name": "Deterjen Cair Konsentrat Rendah Busa 5L", "category": "Bahan Baku", "quantity": 3, "unit": "Jerigen", "estimated_unit_cost": 65000, "recommended_selling_price": calc_price(65000 / 50, safe_margin), "target_margin_percent": safe_margin, "reason": "Deterjen khusus mesin cuci front/top load, hemat air dan busa"},
-                    {"name": "Pewangi & Pelembut Pakaian 5L", "category": "Bahan Baku", "quantity": 2, "unit": "Jerigen", "estimated_unit_cost": 55000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Menjamin cucian harum tahan lama dan lembut"},
-                    {"name": "Parfum Laundry Grade Premium 1L", "category": "Bahan Baku", "quantity": 2, "unit": "Liter", "estimated_unit_cost": 42000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Semprotan finishing saat packing plastik"},
-                    {"name": "Plastik Packing Laundry Jinjing Tebal", "category": "Kemasan", "quantity": 4, "unit": "Pack", "estimated_unit_cost": 28000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kemasan rapi anti air untuk pakaian selesai setrika"},
-                    {"name": "Timbangan Gantung / Duduk Jarum 30Kg", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 125000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Menimbang berat cucian pelanggan secara akurat dan transparan"},
-                    {"name": "Setrika Uap Boiler Standar Laundry", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 350000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Mempercepat proses setrika 3x lebih cepat dan rapi"}
+                    {"name": "Deterjen Cair Konsentrat 5L", "category": "Bahan Baku", "quantity": 3, "unit": "Jerigen", "estimated_unit_cost": 65000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan cuci utama mesin cuci"},
+                    {"name": "Pewangi & Pelembut Pakaian 5L", "category": "Bahan Baku", "quantity": 2, "unit": "Jerigen", "estimated_unit_cost": 55000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Pelembut bilasan cucian"},
+                    {"name": "Parfum Laundry Premium 1L", "category": "Bahan Baku", "quantity": 2, "unit": "Liter", "estimated_unit_cost": 42000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Semprotan finishing saat packing"},
+                    {"name": "Plastik Packing Laundry Jinjing", "category": "Kemasan", "quantity": 4, "unit": "Pack", "estimated_unit_cost": 28000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kemasan anti air hasil setrika"},
+                    {"name": "Timbangan Gantung / Duduk 30Kg", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 125000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Menimbang berat cucian pelanggan secara presisi"},
+                    {"name": "Setrika Uap Boiler Standar", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 350000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Mempercepat setrika rapi"}
                 ]
-            elif any(k in q_lower for k in ["sembako", "kelontong", "toko", "retail"]):
-                summary = f"Rencana Belanja Pasokan Toko Sembako & Ritel Harian untuk '{clean_query}'."
-                notes = f"Formula Anti-Rugi: Sembako fast-moving memiliki margin tipis (8%-15%), kombinasikan dengan camilan/bumbu margin tinggi (25%-35%)."
+                finished = [
+                    {"name": "Jasa Cuci + Setrika Reguler (2 Hari)", "category": "Jasa", "unit": "Kg", "cogs": 1800, "selling_price": calc_price(1800, safe_margin), "target_margin_percent": safe_margin, "stock": 100, "recipe_summary": "Deterjen + Softener + Parfum + Plastik packing"},
+                    {"name": "Jasa Cuci Kering Lipat (1 Hari)", "category": "Jasa", "unit": "Kg", "cogs": 1200, "selling_price": calc_price(1200, safe_margin), "target_margin_percent": safe_margin, "stock": 100, "recipe_summary": "Deterjen + Softener + Packing"},
+                    {"name": "Jasa Cuci Bedcover Besar (Pcs)", "category": "Jasa", "unit": "Pcs", "cogs": 5500, "selling_price": calc_price(5500, safe_margin), "target_margin_percent": safe_margin, "stock": 20, "recipe_summary": "Deterjen ekstra + Softener + Plastik jumbo"},
+                    {"name": "Jasa Setrika Uap Kilat Rapi", "category": "Jasa", "unit": "Kg", "cogs": 1000, "selling_price": calc_price(1000, safe_margin), "target_margin_percent": safe_margin, "stock": 50, "recipe_summary": "Parfum laundry + Gas setrika uap + Packing"}
+                ]
+
+            # Heuristik 4: Ritel / Toko Sembako
+            elif any(k in q_lower for k in ["sembako", "kelontong", "toko", "retail", "warung sembako"]):
+                b_model = "RETAIL"
+                summary = f"Rencana Belanja Pasokan Toko Sembako untuk '{clean_query}'. Barang dagangan yang dibeli langsung menjadi produk eceran di POS kasir."
+                notes = f"Formula Anti-Rugi: Sembako fast-moving margin tipis (10%-15%), kombinasikan dengan barang komplementer (20%-25%)."
                 items = [
-                    {"name": "Beras Premium Ramos 25Kg", "category": "Sembako", "quantity": 4, "unit": "Karung", "estimated_unit_cost": 340000, "recommended_selling_price": calc_price(340000 / 25, 12.0), "target_margin_percent": 12.0, "reason": "Bahan pokok perputaran cepat, margin stabil"},
-                    {"name": "Minyak Goreng Sawit Pouch 2L (Dus)", "category": "Sembako", "quantity": 3, "unit": "Dus", "estimated_unit_cost": 210000, "recommended_selling_price": calc_price(210000 / 6, 10.0), "target_margin_percent": 10.0, "reason": "Kebutuhan harian rumah tangga, daya beli tinggi"},
-                    {"name": "Gula Pasir Kristal Putih 50Kg", "category": "Sembako", "quantity": 1, "unit": "Karung", "estimated_unit_cost": 820000, "recommended_selling_price": calc_price(820000 / 50, 15.0), "target_margin_percent": 15.0, "reason": "Komoditas wajib yang selalu dicari pembeli"},
+                    {"name": "Beras Premium Ramos 25Kg", "category": "Sembako", "quantity": 4, "unit": "Karung", "estimated_unit_cost": 340000, "recommended_selling_price": calc_price(340000 / 5, 12.0), "target_margin_percent": 12.0, "reason": "Bahan pokok dipecah per sak 5kg"},
+                    {"name": "Minyak Goreng Sawit Pouch 2L (Dus)", "category": "Sembako", "quantity": 3, "unit": "Dus", "estimated_unit_cost": 210000, "recommended_selling_price": calc_price(210000 / 6, 10.0), "target_margin_percent": 10.0, "reason": "Kebutuhan harian rumah tangga (1 dus isi 6 pouch)"},
+                    {"name": "Gula Pasir Kristal Putih 50Kg", "category": "Sembako", "quantity": 1, "unit": "Karung", "estimated_unit_cost": 820000, "recommended_selling_price": calc_price(820000 / 50, 15.0), "target_margin_percent": 15.0, "reason": "Diecer per 1kg"},
                     {"name": "Tepung Terigu Segitiga Biru 1Kg (Dus)", "category": "Sembako", "quantity": 2, "unit": "Dus", "estimated_unit_cost": 135000, "recommended_selling_price": calc_price(135000 / 12, 18.0), "target_margin_percent": 18.0, "reason": "Bahan olahan kue dan gorengan"},
-                    {"name": "Telur Ayam Ras Segar 1 Krat (15Kg)", "category": "Sembako", "quantity": 2, "unit": "Krat", "estimated_unit_cost": 380000, "recommended_selling_price": calc_price(380000 / 15, 12.0), "target_margin_percent": 12.0, "reason": "Perputaran harian sangat cepat, simpan di tempat sejuk"},
-                    {"name": "Kantong Plastik Kresek Tebal Ramah Lingkungan", "category": "Kemasan", "quantity": 5, "unit": "Pack", "estimated_unit_cost": 14000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kebutuhan packing belanja pelanggan"}
+                    {"name": "Telur Ayam Ras Segar 1 Krat (15Kg)", "category": "Sembako", "quantity": 2, "unit": "Krat", "estimated_unit_cost": 380000, "recommended_selling_price": calc_price(380000 / 15, 12.0), "target_margin_percent": 12.0, "reason": "Diecer per 1kg"},
+                    {"name": "Kantong Plastik Kresek Ramah Lingkungan", "category": "Kemasan", "quantity": 5, "unit": "Pack", "estimated_unit_cost": 14000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Packing belanjaan pembeli (bukan produk jual)"},
+                    {"name": "Timbangan Digital Meja 30Kg", "category": "Alat Kerja", "quantity": 1, "unit": "Unit", "estimated_unit_cost": 145000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Alat ukur penjualan eceran"}
                 ]
+                finished = [
+                    {"name": "Beras Premium Ramos Sak 5 Kg", "category": "Sembako", "unit": "Sak", "cogs": 68000, "selling_price": calc_price(68000, 12.0), "target_margin_percent": 12.0, "stock": 20, "recipe_summary": "Beras premium kemasan praktis"},
+                    {"name": "Minyak Goreng Pouch 2 Liter", "category": "Sembako", "unit": "Pouch", "cogs": 35000, "selling_price": calc_price(35000, 10.0), "target_margin_percent": 10.0, "stock": 18, "recipe_summary": "Minyak kelapa sawit higienis"},
+                    {"name": "Gula Pasir Kristal 1 Kg", "category": "Sembako", "unit": "Kg", "cogs": 16400, "selling_price": calc_price(16400, 15.0), "target_margin_percent": 15.0, "stock": 50, "recipe_summary": "Gula putih murni"},
+                    {"name": "Telur Ayam Ras Segar 1 Kg", "category": "Sembako", "unit": "Kg", "cogs": 25300, "selling_price": calc_price(25300, 12.0), "target_margin_percent": 12.0, "stock": 30, "recipe_summary": "Telur segar harian"}
+                ]
+
+            # Heuristik 5: Kuliner F&B Umum (Warung Makan, Ayam Geprek, Resto)
             else:
-                # Default F&B / Kuliner UMKM
-                summary = f"Rencana Kebutuhan Bahan Operasional & Perlengkapan untuk '{clean_query}'."
-                notes = f"Formula Anti-Rugi: Patok harga jual minimum HPP + Overhead (30%) + Margin Bersih ({safe_margin:.0f}%). Hindari menjual di bawah batas impas."
+                b_model = "PROCESSED_GOODS"
+                summary = f"Rencana Kebutuhan Dapur & Operasional untuk '{clean_query}'. Memisahkan bahan baku dapur dari menu makanan siap santap di kasir."
+                notes = f"Formula Anti-Rugi: Patok harga jual minimum HPP bahan + Overhead (25%) + Margin Bersih ({safe_margin:.0f}%). Hindari menjual di bawah batas impas."
                 items = [
-                    {"name": "Beras Putih Pulen 25Kg", "category": "Bahan Baku", "quantity": 2, "unit": "Karung", "estimated_unit_cost": 345000, "recommended_selling_price": calc_price(345000 / 150, safe_margin), "target_margin_percent": safe_margin, "reason": "Bahan pokok makanan, 1 karung dapat ~150 porsi nasi"},
-                    {"name": "Minyak Goreng Filma/Bimoli 2L", "category": "Bahan Baku", "quantity": 6, "unit": "Pcs", "estimated_unit_cost": 36000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan penggorengan dan tumisan utama"},
-                    {"name": "Bumbu Rempah & Bawang Merah/Putih", "category": "Bahan Baku", "quantity": 5, "unit": "Kg", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Fondasi cita rasa kuliner nusantara"},
-                    {"name": "Gas Elpiji 3Kg (Isi Ulang)", "category": "Operasional", "quantity": 4, "unit": "Tabung", "estimated_unit_cost": 22000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Energi memasak harian kompor"},
-                    {"name": "Kotak Makan Bento Box / Paper Bowl Eco", "category": "Kemasan", "quantity": 3, "unit": "Pack", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Wadah higienis untuk pesanan pesan antar / take away"},
-                    {"name": "Wajan Kuali & Spatula Komersial", "category": "Alat Kerja", "quantity": 1, "unit": "Set", "estimated_unit_cost": 165000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Peralatan masak kapasitas besar yang tahan lama"}
+                    {"name": "Beras Putih Pulen 25Kg", "category": "Bahan Baku", "quantity": 2, "unit": "Karung", "estimated_unit_cost": 345000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan pokok makanan, 1 karung menghasilkan ~150 porsi"},
+                    {"name": "Minyak Goreng Sawit 2L", "category": "Bahan Baku", "quantity": 6, "unit": "Pcs", "estimated_unit_cost": 36000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Minyak goreng untuk memasak"},
+                    {"name": "Ayam Broiler Segar Karkas", "category": "Bahan Baku", "quantity": 10, "unit": "Kg", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan utama menu ayam goreng/bakar"},
+                    {"name": "Bumbu Dapur, Cabai & Bawang Merah/Putih", "category": "Bahan Baku", "quantity": 5, "unit": "Kg", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Racikan bumbu sambal dan masakan"},
+                    {"name": "Gas Elpiji 3Kg (Isi Ulang)", "category": "Operasional", "quantity": 4, "unit": "Tabung", "estimated_unit_cost": 22000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Bahan bakar kompor dapur"},
+                    {"name": "Kotak Bento Box / Paper Bowl Take Away", "category": "Kemasan", "quantity": 3, "unit": "Pack", "estimated_unit_cost": 35000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Kemasan makanan higienis"},
+                    {"name": "Wajan Kuali Komersial & Spatula", "category": "Alat Kerja", "quantity": 1, "unit": "Set", "estimated_unit_cost": 165000, "recommended_selling_price": 0, "target_margin_percent": 0, "reason": "Peralatan masak kapasitas besar"}
+                ]
+                finished = [
+                    {"name": "Paket Nasi Ayam Goreng Sambal Spesial", "category": "Makanan", "unit": "Porsi", "cogs": 13500, "selling_price": calc_price(13500, safe_margin), "target_margin_percent": safe_margin, "stock": 25, "recipe_summary": "Nasi putih + 1 potong ayam goreng bumbu + sambal + lalapan + kotak kemasan"},
+                    {"name": "Paket Nasi Ayam Bakar Bumbu Madu", "category": "Makanan", "unit": "Porsi", "cogs": 14500, "selling_price": calc_price(14500, safe_margin), "target_margin_percent": safe_margin, "stock": 20, "recipe_summary": "Nasi putih + ayam bakar madu + sambal + lalapan"},
+                    {"name": "Porsi Nasi Putih Pulen Ekstra", "category": "Makanan", "unit": "Porsi", "cogs": 2000, "selling_price": calc_price(2000, safe_margin), "target_margin_percent": safe_margin, "stock": 40, "recipe_summary": "Beras pulen pilihan"},
+                    {"name": "Es Teh Manis Segar", "category": "Minuman", "unit": "Porsi", "cogs": 1500, "selling_price": calc_price(1500, safe_margin), "target_margin_percent": safe_margin, "stock": 50, "recipe_summary": "Teh melati + gula pasir + es batu"}
                 ]
 
             ai_response = {
+                "business_model": b_model,
                 "business_summary": summary,
                 "pricing_strategy_notes": notes,
                 "suggested_items": items,
+                "finished_products": finished,
                 "engine": "FINA-Deterministic-Heuristic-Engine"
             }
 
-        # Kalkulasi Metrik Agregat Finansial dengan type-safety ketat
+        # ---------------------------------------------------------------------
+        # Standardisasi & Normalisasi Respons AI
+        # ---------------------------------------------------------------------
+        business_model = str(ai_response.get("business_model", "PROCESSED_GOODS")).upper()
+        if business_model not in ["PROCESSED_GOODS", "SERVICE", "RETAIL"]:
+            business_model = "PROCESSED_GOODS"
+
+        # 1. Normalisasi Bahan/Alat Modal Awal (suggested_items)
         raw_items = ai_response.get("suggested_items", []) if isinstance(ai_response, dict) else []
-        suggested_items: List[Dict[str, Any]] = [
-            it for it in raw_items if isinstance(it, dict)
-        ]
-
-        total_estimated_budget = sum(
-            float(item.get("quantity", 1)) * float(item.get("estimated_unit_cost", item.get("unit_cost", 0)))
-            for item in suggested_items
-        )
-        potential_revenue = sum(
-            float(item.get("quantity", 1)) * float(item.get("recommended_selling_price", item.get("selling_price", 0)))
-            for item in suggested_items
-            if float(item.get("recommended_selling_price", item.get("selling_price", 0))) > 0
-        )
-
-        margins = [
-            float(item.get("target_margin_percent", item.get("margin_percent", 0)))
-            for item in suggested_items
-            if float(item.get("recommended_selling_price", item.get("selling_price", 0))) > 0
-        ]
-        avg_margin = sum(margins) / len(margins) if margins else safe_margin
-        gross_profit = max(0.0, potential_revenue - total_estimated_budget)
-
-        # Standardisasi atribut item agar kompatibel dengan frontend & backend
         normalized_items: List[Dict[str, Any]] = []
-        for it in suggested_items:
+        for it in raw_items:
+            if not isinstance(it, dict):
+                continue
+            cat = str(it.get("category", "Bahan Baku"))
+            is_equip = bool(
+                it.get("is_equipment") or
+                any(k in cat.lower() for k in ["alat", "mesin", "peralatan", "peralatan & mesin", "operasional"])
+            )
             u_cost = float(it.get("estimated_unit_cost", it.get("unit_cost", 0)))
-            s_price = float(it.get("recommended_selling_price", it.get("selling_price", 0)))
-            m_pct = float(it.get("target_margin_percent", it.get("margin_percent", safe_margin)))
-            is_equip = bool(it.get("is_equipment", "alat" in str(it.get("category", "")).lower() or "mesin" in str(it.get("category", "")).lower()))
+            
+            # Jika item adalah alat kerja, kemasan, atau operasional, pastikan harga jual = 0 (bukan untuk dijual eceran di POS)
+            if is_equip or "kemasan" in cat.lower() or "operasional" in cat.lower() or business_model != "RETAIL":
+                s_price = 0.0
+                m_pct = 0.0
+            else:
+                s_price = float(it.get("recommended_selling_price", it.get("selling_price", 0)))
+                m_pct = float(it.get("target_margin_percent", it.get("margin_percent", safe_margin)))
+
             rsn = str(it.get("reason", it.get("rationale", "")))
 
             normalized_items.append({
                 "name": str(it.get("name", "Bahan/Alat")),
-                "category": str(it.get("category", "Bahan Baku")),
-                "quantity": int(it.get("quantity", 1)),
+                "category": cat,
+                "quantity": max(1, int(it.get("quantity", 1))),
                 "unit": str(it.get("unit", "Pcs")),
                 "estimated_unit_cost": u_cost,
                 "unit_cost": u_cost,
@@ -1009,14 +1116,95 @@ class RealAIService:
                 "rationale": rsn
             })
 
-        summary_text = str(ai_response.get("business_summary", f"Analisis Kebutuhan Awal untuk {clean_query}"))
-        pricing_notes = str(ai_response.get("pricing_strategy_notes", "Tentukan harga jual dengan margin minimal 30% untuk mengamankan kas operasional."))
+        # 2. Normalisasi Produk Jadi Siap Jual di POS (finished_products)
+        raw_finished = ai_response.get("finished_products", []) if isinstance(ai_response, dict) else []
+        normalized_finished: List[Dict[str, Any]] = []
+
+        if raw_finished and isinstance(raw_finished, list):
+            for fp in raw_finished:
+                if not isinstance(fp, dict):
+                    continue
+                cogs_val = float(fp.get("cogs", fp.get("estimated_cogs", 0)))
+                sell_val = float(fp.get("selling_price", fp.get("recommended_selling_price", 0)))
+                m_pct = float(fp.get("target_margin_percent", safe_margin))
+
+                if sell_val <= 0 and cogs_val > 0:
+                    raw_p = cogs_val / max(0.1, (1.0 - (m_pct / 100.0)))
+                    sell_val = float(round(raw_p / 500) * 500)
+
+                normalized_finished.append({
+                    "name": str(fp.get("name", "Produk Siap Jual")),
+                    "category": str(fp.get("category", "Lauk Olahan" if "marinasi" in clean_query.lower() else "Makanan")),
+                    "unit": str(fp.get("unit", "Pack" if "marinasi" in clean_query.lower() else "Porsi")),
+                    "cogs": cogs_val,
+                    "selling_price": sell_val,
+                    "target_margin_percent": m_pct,
+                    "stock": max(1, int(fp.get("stock", 10))),
+                    "recipe_summary": str(fp.get("recipe_summary", ""))
+                })
+
+        # Fallback jika model AI belum menghasilkan finished_products secara eksplisit:
+        if not normalized_finished:
+            # Jika retail, ambil barang sembako/dagangan
+            if business_model == "RETAIL":
+                for it in normalized_items:
+                    if not it["is_equipment"] and "kemasan" not in it["category"].lower():
+                        cogs_it = it["unit_cost"]
+                        sell_it = it["selling_price"] if it["selling_price"] > 0 else (cogs_it * 1.2)
+                        normalized_finished.append({
+                            "name": it["name"],
+                            "category": it["category"],
+                            "unit": it["unit"],
+                            "cogs": cogs_it,
+                            "selling_price": sell_it,
+                            "target_margin_percent": 15.0,
+                            "stock": it["quantity"],
+                            "recipe_summary": "Barang dagangan eceran"
+                        })
+            else:
+                # Olahan / Jasa default
+                normalized_finished = [
+                    {
+                        "name": f"Paket {clean_query.title()} Siap Jual",
+                        "category": "Produk Olahan",
+                        "unit": "Pack",
+                        "cogs": 25000.0,
+                        "selling_price": float(round((25000.0 / max(0.1, (1.0 - safe_margin / 100.0))) / 500) * 500),
+                        "target_margin_percent": safe_margin,
+                        "stock": 10,
+                        "recipe_summary": "Racikan olahan bahan baku pilihan"
+                    }
+                ]
+
+        # 3. Metrik Agregat Finansial
+        total_estimated_budget = sum(
+            float(item["quantity"]) * float(item["unit_cost"])
+            for item in normalized_items
+        )
+
+        potential_revenue = sum(
+            float(item["stock"]) * float(item["selling_price"])
+            for item in normalized_finished
+        )
+
+        total_cogs = sum(
+            float(item["stock"]) * float(item["cogs"])
+            for item in normalized_finished
+        )
+        gross_profit = max(0.0, potential_revenue - total_cogs)
+        avg_margin = (gross_profit / potential_revenue * 100.0) if potential_revenue > 0 else safe_margin
+
+        summary_text = str(ai_response.get("business_summary", f"Analisis Kebutuhan Usaha '{clean_query}'"))
+        pricing_notes = str(ai_response.get("pricing_strategy_notes", f"Terapkan margin {safe_margin:.0f}% untuk mengamankan kas operasional."))
 
         return {
+            "business_model": business_model,
             "business_summary": summary_text,
             "business_type": summary_text,
             "suggested_items": normalized_items,
             "recommended_items": normalized_items,
+            "finished_products": normalized_finished,
+            "saleable_products": normalized_finished,
             "pricing_strategy_notes": pricing_notes,
             "advice": pricing_notes,
             "total_estimated_budget": round(total_estimated_budget, 2),

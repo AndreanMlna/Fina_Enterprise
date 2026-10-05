@@ -342,22 +342,51 @@ async def post_initial_balance(
             detail=str(e)
         )
 
-    # 5. Buat record Product untuk setiap item persediaan
+    # 5. Buat record Product untuk katalog POS kasir (Finished Goods / Saleable Items)
+    # PRINSIP SAK EMKM & ERP: Bahan mentah internal, kemasan vakum, gas elpiji, dan alat kerja
+    # TIDAK DIJUAL di kasir POS. Yang dijual adalah produk/menu jadi olahan atau barang dagangan siap jual.
     products_created = 0
-    for item in payload.inventory_items:
-        product = Product(
-            id=f"prod-{uuid.uuid4().hex[:12]}",
-            tenant_id=current_user.tenant_id,
-            name=item.name,
-            sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
-            category=item.category,
-            price=item.selling_price if item.selling_price > 0 else item.unit_cost * 1.3,
-            cogs=item.unit_cost,
-            stock=item.quantity,
-            unit=item.unit,
-        )
-        db.add(product)
-        products_created += 1
+    NON_SALEABLE_CATEGORIES = {
+        "alat kerja", "peralatan & mesin", "peralatan", "kemasan", "operasional", "aset", "equipment"
+    }
+
+    if payload.finished_products and len(payload.finished_products) > 0:
+        # Prioritas 1: Gunakan katalog produk jadi siap jual yang dikonfirmasi pengguna / direkomendasikan AI
+        for fp in payload.finished_products:
+            product = Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=current_user.tenant_id,
+                name=fp.name,
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category=fp.category or "Umum",
+                price=fp.selling_price,
+                cogs=fp.cogs,
+                stock=fp.stock if fp.stock > 0 else 10,
+                unit=fp.unit or "Pcs",
+            )
+            db.add(product)
+            products_created += 1
+    else:
+        # Fallback (Manual Flow): Hanya daftarkan item persediaan yang BUKAN alat kerja, kemasan, atau operasional
+        for item in payload.inventory_items:
+            cat_clean = item.category.strip().lower()
+            if cat_clean in NON_SALEABLE_CATEGORIES:
+                continue  # Lewati alat kerja/kemasan/operasional agar tidak masuk kasir POS
+            
+            selling_p = item.selling_price if item.selling_price > 0 else (item.unit_cost * 1.3)
+            product = Product(
+                id=f"prod-{uuid.uuid4().hex[:12]}",
+                tenant_id=current_user.tenant_id,
+                name=item.name,
+                sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                category=item.category,
+                price=selling_p,
+                cogs=item.unit_cost,
+                stock=item.quantity,
+                unit=item.unit,
+            )
+            db.add(product)
+            products_created += 1
 
     # 6. Tandai setup selesai (idempotency flag)
     tenant.is_setup_complete = True

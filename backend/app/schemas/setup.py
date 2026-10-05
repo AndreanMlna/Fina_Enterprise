@@ -27,6 +27,18 @@ class FixedAssetPayload(BaseModel):
     )
 
 
+class FinishedProductPayload(BaseModel):
+    """Katalog produk/menu jadi yang siap dijual di kasir POS (Finished Goods / Service Offerings)."""
+    name: str = Field(..., min_length=1, max_length=255, description="Nama menu atau produk siap jual di kasir POS")
+    category: str = Field(default="Makanan", max_length=64, description="Kategori produk siap jual")
+    selling_price: float = Field(..., gt=0, description="Harga jual kasir anti-rugi per porsi/unit (Rp)")
+    cogs: float = Field(default=0.0, ge=0, description="Estimasi HPP (biaya bahan baku + kemasan) per unit (Rp)")
+    stock: int = Field(default=10, ge=0, description="Stok awal siap jual di kasir")
+    unit: str = Field(default="Porsi", max_length=32, description="Satuan penjualan (Porsi, Pack, Pcs, Box, Kg, Layanan)")
+    target_margin_percent: float = Field(default=40.0, description="Target margin laba kotor (%)")
+    recipe_summary: Optional[str] = Field(default=None, description="Kandungan bahan utama pembentuk produk ini")
+
+
 class InitialBalancePayload(BaseModel):
     """Payload lengkap untuk setup saldo awal UMKM."""
     effective_date: str = Field(
@@ -43,6 +55,10 @@ class InitialBalancePayload(BaseModel):
     fixed_assets: List[FixedAssetPayload] = Field(
         default_factory=list,
         description="Daftar aset tetap (peralatan, kendaraan)"
+    )
+    finished_products: List[FinishedProductPayload] = Field(
+        default_factory=list,
+        description="Daftar katalog produk/menu siap jual di kasir POS"
     )
     opening_payables: float = Field(
         default=0, ge=0,
@@ -108,8 +124,20 @@ class SetupAIRecommendationResponse(BaseModel):
     """Respons komprehensif rekomendasi bahan, alat, dan strategi harga jual anti-rugi."""
     business_summary: str = Field(default="", description="Ringkasan analisis profil usaha dari AI")
     business_type: str = Field(default="", description="Alias kategori profil usaha")
+    business_model: str = Field(
+        default="PROCESSED_GOODS",
+        description="Model bisnis terdeteksi: 'PROCESSED_GOODS' (Olahan/Kuliner/Manufaktur), 'SERVICE' (Jasa), 'RETAIL' (Dagang/Kelontong)"
+    )
     suggested_items: List[SetupAIRecommendedItem] = Field(default_factory=list, description="Daftar bahan dan alat yang direkomendasikan")
     recommended_items: List[SetupAIRecommendedItem] = Field(default_factory=list, description="Alias daftar bahan dan alat yang direkomendasikan")
+    finished_products: List[FinishedProductPayload] = Field(
+        default_factory=list,
+        description="Katalog menu/produk jadi siap jual di kasir POS (bukan bahan mentah/alat kerja)"
+    )
+    saleable_products: List[FinishedProductPayload] = Field(
+        default_factory=list,
+        description="Alias katalog menu/produk jadi siap jual di kasir POS"
+    )
     pricing_strategy_notes: str = Field(default="", description="Saran penetapan harga jual agar tidak merugi")
     advice: str = Field(default="", description="Alias saran penetapan harga jual agar tidak merugi")
     total_estimated_budget: float = Field(default=0.0, description="Total estimasi modal belanja bahan & alat (Rp)")
@@ -118,4 +146,5 @@ class SetupAIRecommendationResponse(BaseModel):
     estimated_gross_profit: float = Field(default=0.0, description="Estimasi potensi laba kotor (Rp)")
     average_margin_percent: float = Field(default=40.0, description="Rata-rata margin laba kotor portofolio produk (%)")
     engine: str = Field(default="Google-Gemini-LLM-v2.5", description="Model engine yang digunakan")
+
 

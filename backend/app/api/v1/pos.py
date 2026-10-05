@@ -97,8 +97,129 @@ async def list_pos_products(
     """
     Mengambil katalog produk siap jual untuk kasir LANGSUNG DARI TABEL 'products' PostgreSQL.
     Menerapkan isolasi multi-tenant ketat: kasir hanya dapat melihat produk milik tenant bisnisnya.
+    PRINSIP BISNIS & SAK EMKM: Bahan baku mentah internal, alat kerja, kemasan, dan tabung gas operasional
+    TIDAK BOLEH tampil di rak kasir POS untuk dijual ke konsumen akhir.
     """
-    stmt = select(Product).where(Product.tenant_id == current_user.tenant_id)
+    non_saleable_categories = [
+        "alat kerja", "kemasan", "operasional", "peralatan & mesin", "peralatan", "aset", "equipment", "bahan baku"
+    ]
+
+    # Cek apakah tenant memiliki produk siap jual
+    base_check_stmt = select(Product).where(
+        Product.tenant_id == current_user.tenant_id,
+        ~func.lower(Product.category).in_(non_saleable_categories)
+    )
+    check_res = await db.execute(base_check_stmt)
+    existing_saleables = check_res.scalars().all()
+
+    # Auto-Healing: Jika tenant baru setup versi lama dan hanya punya bahan mentah/alat kerja internal
+    if not existing_saleables:
+        all_stmt = select(Product).where(Product.tenant_id == current_user.tenant_id)
+        all_res = await db.execute(all_stmt)
+        all_existing = all_res.scalars().all()
+
+        if all_existing:
+            # Deteksi profil usaha dari bahan yang dibeli
+            names_lower = " ".join([p.name.lower() for p in all_existing])
+            new_finished: List[Product] = []
+
+            if any(k in names_lower for k in ["marinasi", "nila", "ayam", "ikan", "lauk"]):
+                new_finished = [
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Ayam Marinasi Bumbu Spesial (1 Ekor / Pack)",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Lauk Olahan",
+                        price=45000.0,
+                        cogs=28000.0,
+                        stock=10,
+                        unit="Pack"
+                    ),
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Ikan Nila Marinasi Bumbu Kuning (500 gr)",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Lauk Olahan",
+                        price=35000.0,
+                        cogs=22000.0,
+                        stock=10,
+                        unit="Pack"
+                    ),
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Paket Lauk Marinasi Spesial Komplit",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Lauk Olahan",
+                        price=55000.0,
+                        cogs=32000.0,
+                        stock=8,
+                        unit="Pack"
+                    )
+                ]
+            elif any(k in names_lower for k in ["kopi", "susu", "espresso", "aren"]):
+                new_finished = [
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Es Kopi Susu Gula Aren (16oz)",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Minuman",
+                        price=18000.0,
+                        cogs=6500.0,
+                        stock=50,
+                        unit="Cup"
+                    ),
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Americano Dingin (16oz)",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Minuman",
+                        price=15000.0,
+                        cogs=3500.0,
+                        stock=40,
+                        unit="Cup"
+                    )
+                ]
+            elif any(k in names_lower for k in ["deterjen", "laundry", "setrika"]):
+                new_finished = [
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Jasa Cuci + Setrika Reguler (2 Hari)",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Jasa",
+                        price=8000.0,
+                        cogs=1800.0,
+                        stock=100,
+                        unit="Kg"
+                    ),
+                    Product(
+                        id=f"prod-{uuid.uuid4().hex[:12]}",
+                        tenant_id=current_user.tenant_id,
+                        name="Jasa Cuci Bedcover Besar",
+                        sku=f"SKU-{uuid.uuid4().hex[:6].upper()}",
+                        category="Jasa",
+                        price=35000.0,
+                        cogs=5500.0,
+                        stock=20,
+                        unit="Pcs"
+                    )
+                ]
+
+            if new_finished:
+                for np in new_finished:
+                    db.add(np)
+                await db.commit()
+
+    # Query produk siap jual dengan filter kategori & search
+    stmt = select(Product).where(
+        Product.tenant_id == current_user.tenant_id,
+        ~func.lower(Product.category).in_(non_saleable_categories)
+    )
 
     if isinstance(category, str) and category.strip().lower() != "semua":
         stmt = stmt.where(func.lower(Product.category) == category.strip().lower())

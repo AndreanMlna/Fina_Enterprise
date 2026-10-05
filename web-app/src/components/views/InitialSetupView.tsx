@@ -9,7 +9,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Calendar } from 'lucide-react';
 import { api } from '../../services/api';
-import type { InventoryItemPayload, FixedAssetPayload, SetupStatusResponse } from '../../services/types';
+import type { InventoryItemPayload, FixedAssetPayload, SetupStatusResponse, FinishedProductPayload } from '../../services/types';
 import type { NavigationTab } from '../../types';
 import {
   SetupMonitoringView,
@@ -71,6 +71,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
   const [bankBalance, setBankBalance] = useState<number>(0);
   const [inventoryItems, setInventoryItems] = useState<InventoryItemPayload[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAssetPayload[]>([]);
+  const [finishedProducts, setFinishedProducts] = useState<FinishedProductPayload[]>([]);
   const [openingPayables, setOpeningPayables] = useState<number>(0);
   const [deductFromCash, setDeductFromCash] = useState<boolean>(true);
 
@@ -115,8 +116,11 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
   const isNeracaBalanced = totalAssets > 0 && ownerEquity > 0;
 
   // --- Inventory Handlers ---
-  const handleApplyAISupplies = useCallback((items: InventoryItemPayload[]) => {
+  const handleApplyAISupplies = useCallback((items: InventoryItemPayload[], finished?: FinishedProductPayload[]) => {
     setInventoryItems(items);
+    if (finished && finished.length > 0) {
+      setFinishedProducts(finished);
+    }
   }, []);
 
   const addInventoryItem = useCallback(() => {
@@ -209,6 +213,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
         bank_balance: effectiveBankBalance,
         inventory_items: validInventory,
         fixed_assets: validAssets,
+        finished_products: finishedProducts,
         opening_payables: openingPayables,
       });
 
@@ -374,6 +379,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
             deductFromCash={deductFromCash}
             setDeductFromCash={setDeductFromCash}
             onApplyAISupplies={handleApplyAISupplies}
+            finishedProducts={finishedProducts}
           />
         )}
 

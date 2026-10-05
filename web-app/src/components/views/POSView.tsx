@@ -132,27 +132,36 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
   const totalStaffCount = staffList.length;
   const presentStaffCount = staffList.filter(s => s.is_active).length;
 
-  // 2. Kategori produk dinamis dari inventaris fisik tenant
+  // 2. Kategori produk dinamis dari katalog produk siap jual (Finished Goods & Services)
+  const NON_SALEABLE_CATEGORIES = useMemo(() => new Set([
+    'alat kerja', 'kemasan', 'operasional', 'peralatan & mesin', 'peralatan', 'aset', 'equipment', 'bahan baku'
+  ]), []);
+
+  const saleableProducts = useMemo(() => {
+    const filtered = products.filter(p => !NON_SALEABLE_CATEGORIES.has((p.category || '').trim().toLowerCase()));
+    return filtered.length > 0 ? filtered : products;
+  }, [products, NON_SALEABLE_CATEGORIES]);
+
   const dynamicCategories = useMemo(() => {
     const catSet = new Set<string>(["Semua"]);
-    products.forEach((p) => {
+    saleableProducts.forEach((p) => {
       if (p.category && p.category.trim()) {
         catSet.add(p.category.trim());
       }
     });
     return Array.from(catSet);
-  }, [products]);
+  }, [saleableProducts]);
 
   // 3. Filter produk berdasarkan pencarian & kategori
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
+    return saleableProducts.filter((p) => {
       const matchCat = selectedCategory === "Semua" || p.category === selectedCategory;
       const matchQuery =
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.sku.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchQuery;
     });
-  }, [products, selectedCategory, searchQuery]);
+  }, [saleableProducts, selectedCategory, searchQuery]);
 
   // 4. Kalkulasi Finansial Keranjang (SAK EMKM & PP 55/2022)
   const subtotal = useMemo(() => cart.reduce((acc, item) => acc + item.subtotal, 0), [cart]);

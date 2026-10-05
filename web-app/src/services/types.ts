@@ -186,12 +186,24 @@ export interface FixedAssetPayload {
   asset_type: 'equipment' | 'vehicle';
 }
 
+export interface FinishedProductPayload {
+  name: string;
+  category?: string;
+  selling_price: number;
+  cogs?: number;
+  stock?: number;
+  unit?: string;
+  target_margin_percent?: number;
+  recipe_summary?: string;
+}
+
 export interface InitialBalancePayload {
   effective_date: string;
   cash_on_hand: number;
   bank_balance: number;
   inventory_items: InventoryItemPayload[];
   fixed_assets: FixedAssetPayload[];
+  finished_products?: FinishedProductPayload[];
   opening_payables: number;
 }
 
@@ -231,10 +243,13 @@ export interface SetupAIRecommendationRequest {
 export interface SetupAIRecommendationResponse {
   business_type: string;
   business_summary?: string;
+  business_model?: 'PROCESSED_GOODS' | 'SERVICE' | 'RETAIL';
   advice: string;
   pricing_strategy_notes?: string;
   recommended_items: SetupAIRecommendedItem[];
   suggested_items?: SetupAIRecommendedItem[];
+  finished_products?: FinishedProductPayload[];
+  saleable_products?: FinishedProductPayload[];
   total_estimated_budget: number;
   total_potential_revenue: number;
   potential_revenue?: number;
