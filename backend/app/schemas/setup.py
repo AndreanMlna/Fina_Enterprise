@@ -76,3 +76,34 @@ class SetupStatusResponse(BaseModel):
     journal_entry_number: Optional[str] = Field(default=None, description="Nomor jurnal pembukuan saldo awal")
     audit_merkle_hash: Optional[str] = Field(default=None, description="Hash kriptografis pembukuan saldo awal")
     total_journals_count: int = Field(default=0, description="Total jurnal transaksi yang telah berjalan")
+
+
+class SetupAIRecommendedItem(BaseModel):
+    """Item bahan atau alat rekomendasi AI LLM dengan kalkulasi harga anti-rugi."""
+    name: str = Field(..., description="Nama bahan atau alat yang dibutuhkan")
+    category: str = Field(default="Bahan Baku", description="Kategori: Bahan Baku, Alat Kerja, Kemasan, Operasional, Umum")
+    quantity: int = Field(default=1, ge=1, description="Kuantitas rekomendasi")
+    unit: str = Field(default="Pcs", description="Satuan (Pcs, Kg, Liter, Pack, Box, Porsi, Karung, Set, Unit)")
+    estimated_unit_cost: float = Field(..., ge=0, description="Estimasi harga beli/modal pasar grosir per unit (Rp)")
+    recommended_selling_price: float = Field(..., ge=0, description="Rekomendasi harga jual anti-rugi per unit (Rp)")
+    target_margin_percent: float = Field(default=40.0, description="Target margin laba kotor (%)")
+    reason: str = Field(default="", description="Justifikasi operasional & proteksi margin anti-rugi")
+
+
+class SetupAIRecommendationRequest(BaseModel):
+    """Permintaan rekomendasi bahan, alat, dan harga jual ke sistem AI LLM."""
+    business_type_or_query: str = Field(..., min_length=2, description="Deskripsi usaha atau perintah pengisian bahan/alat dari user")
+    budget_estimate: Optional[float] = Field(default=None, description="Estimasi batas modal belanja awal (Rp, opsional)")
+    target_margin_percent: Optional[float] = Field(default=40.0, description="Target margin laba kotor sasaran (%)")
+
+
+class SetupAIRecommendationResponse(BaseModel):
+    """Respons komprehensif rekomendasi bahan, alat, dan strategi harga jual anti-rugi."""
+    business_summary: str = Field(..., description="Ringkasan analisis profil usaha dari AI")
+    suggested_items: List[SetupAIRecommendedItem] = Field(default_factory=list, description="Daftar bahan dan alat yang direkomendasikan")
+    pricing_strategy_notes: str = Field(..., description="Saran penetapan harga jual agar tidak merugi")
+    total_estimated_budget: float = Field(..., description="Total estimasi modal belanja bahan & alat (Rp)")
+    potential_revenue: float = Field(..., description="Estimasi potensi pendapatan kotor jika persediaan terjual habis (Rp)")
+    average_margin_percent: float = Field(..., description="Rata-rata margin laba kotor portofolio produk (%)")
+    engine: str = Field(default="Google-Gemini-LLM-v2.5", description="Model engine yang digunakan")
+

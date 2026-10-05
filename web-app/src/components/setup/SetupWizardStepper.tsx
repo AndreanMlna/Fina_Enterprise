@@ -11,7 +11,7 @@ interface StepMeta {
 
 export const STEPS: StepMeta[] = [
   { number: 1, title: 'Kas & Bank', icon: Wallet },
-  { number: 2, title: 'Persediaan', icon: Package },
+  { number: 2, title: 'Bahan & Alat', icon: Package },
   { number: 3, title: 'Aset Tetap', icon: Wrench },
   { number: 4, title: 'Konfirmasi', icon: CheckCircle2 },
 ];

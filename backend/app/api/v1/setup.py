@@ -25,7 +25,10 @@ from app.schemas.setup import (
     InitialBalancePayload,
     InitialBalanceResponse,
     SetupStatusResponse,
+    SetupAIRecommendationRequest,
+    SetupAIRecommendationResponse,
 )
+from app.domain.services.ai_service import ai_service
 
 router = APIRouter(prefix="/setup", tags=["Setup Saldo Awal (Modal Awal)"])
 
@@ -154,6 +157,35 @@ async def check_setup_status(
         audit_merkle_hash=audit_merkle_hash,
         total_journals_count=total_journals,
     )
+
+
+@router.post(
+    "/recommend-supplies",
+    response_model=SetupAIRecommendationResponse,
+    summary="Rekomendasi AI LLM Bahan & Alat Usaha serta Kalkulasi Harga Jual Anti-Rugi",
+    status_code=status.HTTP_200_OK,
+)
+async def recommend_startup_supplies(
+    payload: SetupAIRecommendationRequest,
+    current_user: UserCredential = Depends(get_current_user),
+):
+    """
+    Rekomendasi cerdas berbasis Google Gemini AI (LLM) untuk menentukan
+    kebutuhan bahan baku, alat kerja, dan estimasi harga jual anti-rugi
+    sesuai jenis usaha UMKM dan estimasi budget modal pemilik.
+    """
+    try:
+        recommendation = await ai_service.recommend_startup_supplies_and_pricing(
+            query=payload.query,
+            budget_estimate=payload.budget_estimate,
+            target_margin=payload.target_margin,
+        )
+        return recommendation
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal memproses rekomendasi AI: {str(e)}"
+        )
 
 
 @router.post(

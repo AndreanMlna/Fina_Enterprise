@@ -206,6 +206,34 @@ export interface InitialBalanceResponse {
   audit_merkle_hash: string;
 }
 
+export interface SetupAIRecommendedItem {
+  name: string;
+  category: string; // 'Bahan Baku' | 'Peralatan & Mesin' | 'Perlengkapan Usaha' | 'Kemasan & Wadah'
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  selling_price: number;
+  margin_percent: number;
+  is_equipment: boolean;
+  rationale: string;
+}
+
+export interface SetupAIRecommendationRequest {
+  query: string;
+  budget_estimate?: number;
+  target_margin?: number;
+}
+
+export interface SetupAIRecommendationResponse {
+  business_type: string;
+  advice: string;
+  recommended_items: SetupAIRecommendedItem[];
+  total_estimated_budget: number;
+  total_potential_revenue: number;
+  estimated_gross_profit: number;
+  average_margin_percent: number;
+}
+
 export interface SetupStatusResponse {
   is_setup_complete: boolean;
   tenant_id: string;

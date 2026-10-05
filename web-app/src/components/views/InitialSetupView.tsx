@@ -72,6 +72,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
   const [inventoryItems, setInventoryItems] = useState<InventoryItemPayload[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAssetPayload[]>([]);
   const [openingPayables, setOpeningPayables] = useState<number>(0);
+  const [deductFromCash, setDeductFromCash] = useState<boolean>(true);
 
   // --- Accounting Calculations ---
   const totalInventory = useMemo(() => {
@@ -87,12 +88,37 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
   }, [fixedAssets]);
 
   const totalFixedAssets = totalEquipment + totalVehicles;
-  const totalAssets = cashOnHand + bankBalance + totalInventory + totalFixedAssets;
+
+  // Real-time Cash & Bank Deduction (Double-Entry Allocation)
+  const { effectiveCashOnHand, effectiveBankBalance } = useMemo(() => {
+    if (!deductFromCash || totalInventory <= 0) {
+      return { effectiveCashOnHand: cashOnHand, effectiveBankBalance: bankBalance };
+    }
+    let rem = totalInventory;
+    let remCash = cashOnHand;
+    let remBank = bankBalance;
+
+    if (remCash >= rem) {
+      remCash -= rem;
+      rem = 0;
+    } else {
+      rem -= remCash;
+      remCash = 0;
+      remBank = Math.max(0, remBank - rem);
+    }
+    return { effectiveCashOnHand: remCash, effectiveBankBalance: remBank };
+  }, [deductFromCash, totalInventory, cashOnHand, bankBalance]);
+
+  const totalAssets = effectiveCashOnHand + effectiveBankBalance + totalInventory + totalFixedAssets;
   const totalLiabilities = openingPayables;
   const ownerEquity = totalAssets - totalLiabilities;
   const isNeracaBalanced = totalAssets > 0 && ownerEquity > 0;
 
   // --- Inventory Handlers ---
+  const handleApplyAISupplies = useCallback((items: InventoryItemPayload[]) => {
+    setInventoryItems(items);
+  }, []);
+
   const addInventoryItem = useCallback(() => {
     setInventoryItems(prev => [
       ...prev,
@@ -179,8 +205,8 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
     try {
       const result = await api.postInitialBalance({
         effective_date: effectiveDate,
-        cash_on_hand: cashOnHand,
-        bank_balance: bankBalance,
+        cash_on_hand: effectiveCashOnHand,
+        bank_balance: effectiveBankBalance,
         inventory_items: validInventory,
         fixed_assets: validAssets,
         opening_payables: openingPayables,
@@ -293,8 +319,8 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
 
       {/* 3. 4-Card Live Summary Pills */}
       <SetupSummaryPills
-        cashOnHand={cashOnHand}
-        bankBalance={bankBalance}
+        cashOnHand={effectiveCashOnHand}
+        bankBalance={effectiveBankBalance}
         totalInventory={totalInventory}
         totalFixedAssets={totalFixedAssets}
         ownerEquity={ownerEquity}
@@ -313,13 +339,13 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
         <div style={{ marginBottom: '18px' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#FFFFFF' }}>
             {step === 1 && 'Kas & Saldo Bank'}
-            {step === 2 && 'Persediaan Barang'}
+            {step === 2 && 'Bahan & Alat Usaha yang Dibutuhkan'}
             {step === 3 && 'Aset Tetap Usaha'}
             {step === 4 && 'Review & Konfirmasi'}
           </h3>
           <p style={{ color: '#94a3b8', fontSize: '0.80rem', margin: '3px 0 0 0' }}>
             {step === 1 && 'Masukkan uang tunai di kasir dan saldo rekening bank usaha.'}
-            {step === 2 && 'Daftar barang dagangan atau bahan baku awal yang siap digunakan.'}
+            {step === 2 && 'Daftar belanja bahan baku dan alat kerja untuk memulai usaha, lengkap dengan kalkulator anti-rugi dan rekomendasi AI.'}
             {step === 3 && 'Peralatan operasional, mesin, atau kendaraan yang dimiliki usaha.'}
             {step === 4 && 'Periksa rincian saldo awal sebelum disimpan ke sistem.'}
           </p>
@@ -335,7 +361,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
           />
         )}
 
-        {/* STEP 2: PERSEDIAAN BARANG */}
+        {/* STEP 2: BAHAN & ALAT USAHA (AI + ANTI-RUGI) */}
         {step === 2 && (
           <SetupWizardStep2Inventory
             inventoryItems={inventoryItems}
@@ -344,6 +370,10 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
             addInventoryItem={addInventoryItem}
             addPresetInventory={addPresetInventory}
             totalInventory={totalInventory}
+            availableCash={cashOnHand + bankBalance}
+            deductFromCash={deductFromCash}
+            setDeductFromCash={setDeductFromCash}
+            onApplyAISupplies={handleApplyAISupplies}
           />
         )}
 
@@ -364,8 +394,8 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
           <SetupWizardStep4Confirm
             openingPayables={openingPayables}
             setOpeningPayables={setOpeningPayables}
-            cashOnHand={cashOnHand}
-            bankBalance={bankBalance}
+            cashOnHand={effectiveCashOnHand}
+            bankBalance={effectiveBankBalance}
             inventoryItems={inventoryItems}
             totalInventory={totalInventory}
             totalFixedAssets={totalFixedAssets}

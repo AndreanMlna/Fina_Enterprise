@@ -104,6 +104,7 @@ class ApiService {
   // --- Domain: Setup Saldo Awal (Modal Awal) ---
   getSetupStatus = setupService.getSetupStatus.bind(setupService);
   postInitialBalance = setupService.postInitialBalance.bind(setupService);
+  getAISuppliesRecommendation = setupService.getAISuppliesRecommendation.bind(setupService);
 }
 
 export const api = new ApiService();

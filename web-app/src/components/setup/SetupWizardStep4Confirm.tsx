@@ -97,7 +97,7 @@ export const SetupWizardStep4Confirm: React.FC<SetupWizardStep4ConfirmProps> = (
               <span className="mono">{formatCurrency(bankBalance)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1' }}>
-              <span>Persediaan ({inventoryItems.filter(i => i.name).length} barang)</span>
+              <span>Bahan & Alat Usaha ({inventoryItems.filter(i => i.name).length} item)</span>
               <span className="mono">{formatCurrency(totalInventory)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1' }}>

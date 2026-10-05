@@ -68,7 +68,7 @@ export const SetupSummaryPills: React.FC<SetupSummaryPillsProps> = ({
             {formatCurrency(totalInventory)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
-            Persediaan Barang
+            Bahan & Alat Usaha
           </div>
         </div>
       </div>
