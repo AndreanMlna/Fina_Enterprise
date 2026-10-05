@@ -214,6 +214,39 @@ class RealAIService:
             logger.warning(f"[RealAIService] Gagal komputasi ELA: {e}")
             return 80, False, "Evaluasi ELA diselesaikan dengan analisis integritas dasar."
 
+    def _inspect_receipt_image_vision(self, image_bytes: Optional[bytes]) -> Optional[Dict[str, Any]]:
+        """Menjalankan Google Gemini Vision OCR pada nota fisik jika tersedia."""
+        client = self._client
+        if not (self.is_gemini_active and client and image_bytes and len(image_bytes) > 500):
+            return None
+        try:
+            from google.genai import types
+            img = Image.open(io.BytesIO(image_bytes))
+            prompt = (
+                "Analisis gambar nota belanja ini. Ekstrak nama toko, tanggal, item yang dibeli, dan periksa "
+                "apakah ada kejanggalan visual (seperti ukuran font angka total berbeda dari baris lainnya). "
+                "Jawab dalam format JSON: {\"merchant\": \"...\", \"tampered\": false, \"reason\": \"...\"}"
+            )
+            candidates = [self.primary_model]
+            for m in self.fallback_models:
+                if m not in candidates:
+                    candidates.append(m)
+
+            for model_name in candidates:
+                try:
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents=[img, prompt],
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    if res and res.text:
+                        return json.loads(res.text)
+                except Exception as e:
+                    logger.warning(f"[RealAIService] Gemini Vision OCR gagal dengan model '{model_name}': {e}")
+        except Exception as e:
+            logger.warning(f"[RealAIService] Gagal memproses gambar nota: {e}")
+        return None
+
     def analyze_receipt_multimodal(
         self,
         image_bytes: Optional[bytes] = None,
@@ -239,15 +272,42 @@ class RealAIService:
                 details = f"Inkonsistensi Aritmatika: Total rincian (Rp {computed_sum:,.0f}) tidak cocok dengan subtotal (Rp {subtotal:,.0f})."
 
         # 3. Analisis penglihatan multimodal Gemini jika ada gambar & API key
-        gemini_ocr_notes = None
+        gemini_ocr_notes = self._inspect_receipt_image_vision(image_bytes)
+        if gemini_ocr_notes and gemini_ocr_notes.get("tampered"):
+            is_tampered = True
+            ela_score = min(ela_score, 35)
+            details += f" | Gemini Vision: {gemini_ocr_notes.get('reason')}"
+
+        return {
+            "ela_score": ela_score,
+            "is_tampered": is_tampered,
+            "details": details,
+            "vision_metadata": gemini_ocr_notes
+        }
+
+    def _inspect_transfer_image_vision(self, image_bytes: bytes) -> Optional[Dict[str, Any]]:
+        """Menjalankan Google Gemini Vision OCR pada bukti transfer bank."""
         client = self._client
-        if self.is_gemini_active and client and image_bytes and len(image_bytes) > 500:
+        if not (self.is_gemini_active and client and len(image_bytes) > 200):
+            return None
+        try:
             from google.genai import types
             img = Image.open(io.BytesIO(image_bytes))
             prompt = (
-                "Analisis gambar nota belanja ini. Ekstrak nama toko, tanggal, item yang dibeli, dan periksa "
-                "apakah ada kejanggalan visual (seperti ukuran font angka total berbeda dari baris lainnya). "
-                "Jawab dalam format JSON: {\"merchant\": \"...\", \"tampered\": false, \"reason\": \"...\"}"
+                "Anda adalah AI Forensik Dokumen Perbankan Indonesia. "
+                "Analisis bukti transfer m-Banking ini (BCA Mobile, Livin Mandiri, BRImo, BNI, QRIS, GoPay, OVO, Dana). "
+                "Ekstrak data dan periksa apakah ada tanda manipulasi/editan digital pada nominal atau nama penerima. "
+                "Kembalikan JSON murni dengan format:\n"
+                "{\n"
+                '  "bank_name": "BCA / Mandiri / BRI / BNI / E-Wallet",\n'
+                '  "sender_name": "Nama Pengirim",\n'
+                '  "recipient_name": "Nama Penerima",\n'
+                '  "transfer_amount": 50000.0,\n'
+                '  "reference_number": "Nomor Referensi/Transaksi",\n'
+                '  "transaction_time": "Waktu transaksi",\n'
+                '  "is_tampered": false,\n'
+                '  "tamper_reason": "Alasan jika terdeteksi manipulasi atau font tidak presisi"\n'
+                "}"
             )
             candidates = [self.primary_model]
             for m in self.fallback_models:
@@ -262,22 +322,12 @@ class RealAIService:
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     if res and res.text:
-                        parsed = json.loads(res.text)
-                        if parsed.get("tampered"):
-                            is_tampered = True
-                            ela_score = min(ela_score, 35)
-                            details += f" | Gemini Vision: {parsed.get('reason')}"
-                        gemini_ocr_notes = parsed
-                        break
-                except Exception as e:
-                    logger.warning(f"[RealAIService] Gemini Vision OCR gagal dengan model '{model_name}': {e}")
-
-        return {
-            "ela_score": ela_score,
-            "is_tampered": is_tampered,
-            "details": details,
-            "vision_metadata": gemini_ocr_notes
-        }
+                        return json.loads(res.text)
+                except Exception as err:
+                    logger.warning(f"[RealAIService] Vision verifikasi transfer gagal model {model_name}: {err}")
+        except Exception as e:
+            logger.warning(f"[RealAIService] Gagal membuka image transfer: {e}")
+        return None
 
     def verify_bank_transfer_proof(
         self,
@@ -292,63 +342,25 @@ class RealAIService:
         3. Membandingkan nominal yang diekstrak dengan expected_amount (anti-fraud).
         """
         ela_score, is_tampered, ela_details = self.compute_ela_matrix(image_bytes)
-        
+
         bank_name = "BCA / Bank Transfer"
         sender_name = "Pelanggan"
         transfer_amount = expected_amount
         ref_number = f"TRX-{uuid.uuid4().hex[:8].upper()}"
         vision_reason = "Bukti transfer terverifikasi asli secara visual."
 
-        client = self._client
-        if self.is_gemini_active and client and len(image_bytes) > 200:
-            try:
-                from google.genai import types
-                img = Image.open(io.BytesIO(image_bytes))
-                prompt = (
-                    "Anda adalah AI Forensik Dokumen Perbankan Indonesia. "
-                    "Analisis bukti transfer m-Banking ini (BCA Mobile, Livin Mandiri, BRImo, BNI, QRIS, GoPay, OVO, Dana). "
-                    "Ekstrak data dan periksa apakah ada tanda manipulasi/editan digital pada nominal atau nama penerima. "
-                    "Kembalikan JSON murni dengan format:\n"
-                    "{\n"
-                    '  "bank_name": "BCA / Mandiri / BRI / BNI / E-Wallet",\n'
-                    '  "sender_name": "Nama Pengirim",\n'
-                    '  "recipient_name": "Nama Penerima",\n'
-                    '  "transfer_amount": 50000.0,\n'
-                    '  "reference_number": "Nomor Referensi/Transaksi",\n'
-                    '  "transaction_time": "Waktu transaksi",\n'
-                    '  "is_tampered": false,\n'
-                    '  "tamper_reason": "Alasan jika terdeteksi manipulasi atau font tidak presisi"\n'
-                    "}"
-                )
-                candidates = [self.primary_model]
-                for m in self.fallback_models:
-                    if m not in candidates:
-                        candidates.append(m)
-
-                for model_name in candidates:
-                    try:
-                        res = client.models.generate_content(
-                            model=model_name,
-                            contents=[img, prompt],
-                            config=types.GenerateContentConfig(response_mime_type="application/json")
-                        )
-                        if res and res.text:
-                            parsed = json.loads(res.text)
-                            bank_name = parsed.get("bank_name") or bank_name
-                            sender_name = parsed.get("sender_name") or sender_name
-                            parsed_amt = float(parsed.get("transfer_amount") or 0.0)
-                            if parsed_amt > 0:
-                                transfer_amount = parsed_amt
-                            ref_number = parsed.get("reference_number") or ref_number
-                            if parsed.get("is_tampered"):
-                                is_tampered = True
-                                ela_score = min(ela_score, 35)
-                                vision_reason = parsed.get("tamper_reason") or "Manipulasi grafis terdeteksi oleh Vision AI"
-                            break
-                    except Exception as err:
-                        logger.warning(f"[RealAIService] Vision verifikasi transfer gagal model {model_name}: {err}")
-            except Exception as e:
-                logger.warning(f"[RealAIService] Gagal membuka image transfer: {e}")
+        parsed = self._inspect_transfer_image_vision(image_bytes)
+        if parsed:
+            bank_name = parsed.get("bank_name") or bank_name
+            sender_name = parsed.get("sender_name") or sender_name
+            parsed_amt = float(parsed.get("transfer_amount") or 0.0)
+            if parsed_amt > 0:
+                transfer_amount = parsed_amt
+            ref_number = parsed.get("reference_number") or ref_number
+            if parsed.get("is_tampered"):
+                is_tampered = True
+                ela_score = min(ela_score, 35)
+                vision_reason = parsed.get("tamper_reason") or "Manipulasi grafis terdeteksi oleh Vision AI"
 
         # Validasi kecocokan nominal transfer vs invoice
         amount_mismatch = abs(transfer_amount - expected_amount) > 100.0 if expected_amount > 0 else False
@@ -594,6 +606,61 @@ class RealAIService:
     # =========================================================================
     # FITUR 8: DYNAMIC BILL OF MATERIALS & AI PRICING ENGINE (ANTI-RUGI)
     # =========================================================================
+    def _query_gemini_pricing_insights(
+        self,
+        cogs_data: Dict[str, Any],
+        product_name: str,
+        category: str
+    ) -> Optional[Dict[str, Any]]:
+        """Meminta insight analisis harga & rekomendasi strategis dari Google Gemini."""
+        try:
+            detailed_breakdown = cogs_data["detailed_breakdown"]
+            materials_summary = "\n".join([
+                f"- {b['material_name']}: {b['quantity']} {b['unit']} @ Rp {b['cost_per_unit']:,.0f} = Rp {b['subtotal_cost']:,.0f} ({b['cost_share_percent']}%)"
+                for b in detailed_breakdown[:5]
+            ])
+            overhead_val = cogs_data.get("overhead_cost_per_unit", 0.0)
+            prompt = (
+                f"Sebagai AI Chief Financial Officer & Pricing Strategist bersertifikat SAK EMKM untuk UMKM Indonesia, "
+                f"lakukan analisis harga pokok penjualan (HPP) dan evaluasi strategi harga jual untuk produk berikut:\n\n"
+                f"Informasi Produk:\n"
+                f"- Nama Produk: {product_name or 'Produk UMKM'}\n"
+                f"- Kategori: {category}\n"
+                f"- Harga Jual Saat Ini: Rp {cogs_data['cur_price']:,.0f}\n"
+                f"- Komposisi Bahan Baku (BOM):\n{materials_summary}\n"
+                f"- HPP Bahan Baku: Rp {cogs_data['raw_material_cost']:,.0f}\n"
+                f"- Estimasi Susut ({cogs_data['safe_wastage_pct']}%): Rp {cogs_data['wastage_cost']:,.0f}\n"
+                f"- Biaya Overhead Langsung: Rp {overhead_val:,.0f}\n"
+                f"- Total HPP Riil per Pcs: Rp {cogs_data['total_unit_cost_hpp']:,.0f}\n"
+                f"- Titik Impas (BEP): Rp {cogs_data['bep_price_rounded']:,.0f}\n"
+                f"- Rekomendasi Harga Minimal (Margin 20%): Rp {cogs_data['floor_price_rounded']:,.0f}\n"
+                f"- Rekomendasi Harga Optimal (Margin {int(cogs_data['safe_target_margin'] * 100)}%): Rp {cogs_data['recommended_price_rounded']:,.0f}\n"
+                f"- Status Margin: {cogs_data['margin_status']} ({cogs_data['current_margin_percent']:.1f}%)\n\n"
+                f"Format respons HARUS berupa JSON valid tanpa markdown tambahan dengan kunci:\n"
+                f"{{\n"
+                f'  "ai_executive_summary": "string ringkasan eksekutif 1-2 kalimat",\n'
+                f'  "ai_financial_rationale": "string penjelasan detail justifikasi harga rekomendasi",\n'
+                f'  "cost_driver_analysis": "string analisis bahan baku paling membebani HPP",\n'
+                f'  "strategic_actions": ["aksi 1", "aksi 2", "aksi 3"],\n'
+                f'  "inflation_resilience_tip": "string saran mitigasi saat restock berikutnya"\n'
+                f"}}"
+            )
+            raw_json = self._call_gemini_text(
+                prompt=prompt,
+                system_instruction="Anda adalah konsultan keuangan UMKM Indonesia independen yang melindungi pemilik usaha dari margin leakage dan kebangkrutan tersembunyi.",
+                response_json=True
+            )
+            if raw_json:
+                clean_json = raw_json.strip()
+                if clean_json.startswith("```json"):
+                    clean_json = clean_json[7:]
+                if clean_json.endswith("```"):
+                    clean_json = clean_json[:-3]
+                return json.loads(clean_json.strip())
+        except Exception as e:
+            logger.warning(f"[RealAIService] Gagal query Gemini untuk analisis harga: {e}")
+        return None
+
     def calculate_dynamic_pricing_recommendation(
         self,
         materials: List[Dict[str, Any]],
@@ -609,215 +676,46 @@ class RealAIService:
         Kalkulasi HPP Dinamis & Rekomendasi Harga Jual AI Multi-Tier.
         Menjamin UMKM TIDAK RUGI (Anti-Margin Leakage) baik saat input awal,
         setiap restock (recycle stock) bahan baku, maupun saat batch produksi produk.
-
-        Prinsip Matematika & Akuntansi (SAK EMKM + PP 55/2022):
-        1. Direct Material Cost: Σ (quantity_i * cost_per_unit_i)
-        2. Wastage Adjustment (Yield Loss): Raw Material Cost / (1 - wastage_pct/100)
-        3. Real HPP / COGS per unit: Adjusted Material Cost + Overhead + Packaging
-        4. Break-Even Price: HPP / (1 - PP55_Tax_Rate) [Toleransi 0 Margin]
-        5. Floor Price (Batas Bawah Aman Anti-Rugi): HPP / (1 - 0.20 - PP55_Tax_Rate)
-        6. Recommended Price (Margin Sehat Berkelanjutan): HPP / (1 - target_margin - PP55_Tax_Rate)
-        7. Premium Price (Margin Ritel 55%): HPP / (1 - 0.55 - PP55_Tax_Rate)
         """
-        tax_pp55_rate = 0.005  # PPh Final 0.5% (PP 55/2022)
-        safe_target_margin = max(15.0, min(80.0, float(target_margin_percent or 35.0))) / 100.0
-        safe_wastage_pct = max(0.0, min(30.0, float(wastage_percent or 0.0)))
+        # 1. Komputasi HPP matematis deterministik & 4-tier pricing tiers
+        cogs_data = _compute_cogs_and_pricing_tiers(
+            materials=materials,
+            current_selling_price=current_selling_price,
+            overhead_cost_per_unit=overhead_cost_per_unit,
+            wastage_percent=wastage_percent,
+            target_margin_percent=target_margin_percent
+        )
 
-        # 1. Hitung biaya bahan baku langsung (Direct Materials Cost)
-        raw_material_cost = 0.0
-        detailed_breakdown = []
-        for m in materials:
-            qty = max(0.0, float(m.get("quantity", m.get("quantity_required", 0.0))))
-            cost_per_u = max(0.0, float(m.get("cost_per_unit", 0.0)))
-            subtotal = qty * cost_per_u
-            raw_material_cost += subtotal
-            detailed_breakdown.append({
-                "material_name": str(m.get("material_name", "Bahan")),
-                "quantity": qty,
-                "unit": str(m.get("unit", "Pcs")),
-                "cost_per_unit": cost_per_u,
-                "subtotal_cost": subtotal,
-                "cost_share_percent": 0.0  # dihitung ulang di bawah
-            })
-
-        # Hitung kontribusi biaya per bahan
-        if raw_material_cost > 0:
-            for item in detailed_breakdown:
-                item["cost_share_percent"] = round((item["subtotal_cost"] / raw_material_cost) * 100, 1)
-
-        # Urutkan berdasarkan komponen bahan yang paling membebani biaya (Cost Driver Descending)
-        detailed_breakdown.sort(key=lambda x: x["subtotal_cost"], reverse=True)
-
-        # 2. Faktor susut bahan / yield loss
-        wastage_multiplier = 1.0 / (1.0 - (safe_wastage_pct / 100.0)) if safe_wastage_pct < 99 else 1.0
-        adjusted_material_cost = raw_material_cost * wastage_multiplier
-        wastage_cost = adjusted_material_cost - raw_material_cost
-
-        # 3. Total HPP Unit Riil (Cost of Goods Sold per Unit)
-        total_unit_cost_hpp = adjusted_material_cost + max(0.0, float(overhead_cost_per_unit or 0.0))
-
-        # 4. Multi-Tier Dynamic Price Calculation (Anti-Rugi & Relevan)
-        if total_unit_cost_hpp > 0:
-            # BEP: Menutup modal bahan, susut, overhead, dan pajak 0.5%
-            bep_price = total_unit_cost_hpp / (1.0 - tax_pp55_rate)
-            # Floor Price: Margin aman minimum 20%
-            floor_price_min = total_unit_cost_hpp / (1.0 - 0.20 - tax_pp55_rate)
-            # Recommended Price: Target margin sehat (default 35%)
-            recommended_price = total_unit_cost_hpp / (1.0 - safe_target_margin - tax_pp55_rate)
-            # Premium Price: Margin ritel premium 55%
-            premium_price = total_unit_cost_hpp / (1.0 - 0.55 - tax_pp55_rate)
-        else:
-            bep_price = float(current_selling_price or 0.0)
-            floor_price_min = bep_price
-            recommended_price = bep_price
-            premium_price = bep_price
-
-        # Pembulatan ramah UMKM (ke kelipatan Rp 500 terdekat ke atas untuk harga retail)
-        def _round_retail(p: float) -> float:
-            return float(int((p + 499) // 500) * 500) if p > 0 else 0.0
-
-        bep_price_rounded = _round_retail(bep_price)
-        floor_price_rounded = _round_retail(floor_price_min)
-        recommended_price_rounded = _round_retail(recommended_price)
-        premium_price_rounded = _round_retail(premium_price)
-
-        # 5. Evaluasi Status Margin & Deteksi Kerugian (Margin Leakage Guard)
-        cur_price = float(current_selling_price or 0.0)
-        if cur_price > 0 and total_unit_cost_hpp > 0:
-            current_margin_percent = round(((cur_price - total_unit_cost_hpp) / cur_price) * 100, 1)
-        else:
-            current_margin_percent = 0.0
-
-        if cur_price <= 0:
-            margin_status = "UNPRICED"
-            margin_label = "Harga Belum Ditentukan"
-            is_at_loss = False
-        elif cur_price < bep_price:
-            margin_status = "CRITICAL_LOSS"
-            margin_label = "BAHAYA: RUGI OPERASIONAL!"
-            is_at_loss = True
-        elif cur_price < floor_price_min:
-            margin_status = "MARGIN_LEAKAGE"
-            margin_label = "WASPADA: Margin Terlalu Tipis (< 20%)"
-            is_at_loss = True
-        else:
-            margin_status = "HEALTHY"
-            margin_label = "SEHAT: Margin Berkelanjutan"
-            is_at_loss = False
-
-        # 6. AI Strategic Reasoning (Google Gemini atau Deterministic Heuristics)
-        top_driver_name = detailed_breakdown[0]["material_name"] if detailed_breakdown else "Bahan Baku"
-        top_driver_share = detailed_breakdown[0]["cost_share_percent"] if detailed_breakdown else 0.0
-
+        # 2. Query Gemini LLM atau Fallback ke Heuristik Deterministik
         ai_response = None
         if self.is_gemini_active:
-            try:
-                materials_summary = "\n".join([
-                    f"- {b['material_name']}: {b['quantity']} {b['unit']} @ Rp {b['cost_per_unit']:,.0f} = Rp {b['subtotal_cost']:,.0f} ({b['cost_share_percent']}%)"
-                    for b in detailed_breakdown[:5]
-                ])
-                prompt = (
-                    f"Sebagai AI Chief Financial Officer & Pricing Strategist bersertifikat SAK EMKM untuk UMKM Indonesia, "
-                    f"lakukan analisis harga pokok penjualan (HPP) dan evaluasi strategi harga jual untuk produk berikut:\n\n"
-                    f"Informasi Produk:\n"
-                    f"- Nama Produk: {product_name or 'Produk UMKM'}\n"
-                    f"- Kategori: {category}\n"
-                    f"- Harga Jual Saat Ini: Rp {cur_price:,.0f}\n"
-                    f"- Komposisi Bahan Baku (BOM):\n{materials_summary}\n"
-                    f"- HPP Bahan Baku: Rp {raw_material_cost:,.0f}\n"
-                    f"- Estimasi Susut ({safe_wastage_pct}%): Rp {wastage_cost:,.0f}\n"
-                    f"- Biaya Overhead Langsung: Rp {overhead_cost_per_unit:,.0f}\n"
-                    f"- Total HPP Riil per Pcs: Rp {total_unit_cost_hpp:,.0f}\n"
-                    f"- Titik Impas (BEP): Rp {bep_price_rounded:,.0f}\n"
-                    f"- Rekomendasi Harga Minimal (Margin 20%): Rp {floor_price_rounded:,.0f}\n"
-                    f"- Rekomendasi Harga Optimal (Margin {int(safe_target_margin * 100)}%): Rp {recommended_price_rounded:,.0f}\n"
-                    f"- Status Margin: {margin_status} ({current_margin_percent:.1f}%)\n\n"
-                    f"Format respons HARUS berupa JSON valid tanpa markdown tambahan dengan kunci:\n"
-                    f"{{\n"
-                    f'  "ai_executive_summary": "string ringkasan eksekutif 1-2 kalimat",\n'
-                    f'  "ai_financial_rationale": "string penjelasan detail justifikasi harga rekomendasi",\n'
-                    f'  "cost_driver_analysis": "string analisis bahan baku paling membebani HPP",\n'
-                    f'  "strategic_actions": ["aksi 1", "aksi 2", "aksi 3"],\n'
-                    f'  "inflation_resilience_tip": "string saran mitigasi saat restock berikutnya"\n'
-                    f"}}"
-                )
-                raw_json = self._call_gemini_text(
-                    prompt=prompt,
-                    system_instruction="Anda adalah konsultan keuangan UMKM Indonesia independen yang melindungi pemilik usaha dari margin leakage dan kebangkrutan tersembunyi.",
-                    response_json=True
-                )
-                if raw_json:
-                    clean_json = raw_json.strip()
-                    if clean_json.startswith("```json"):
-                        clean_json = clean_json[7:]
-                    if clean_json.endswith("```"):
-                        clean_json = clean_json[:-3]
-                    ai_response = json.loads(clean_json.strip())
-            except Exception as e:
-                logger.warning(f"[RealAIService] Gagal query Gemini untuk analisis harga: {e}")
-                ai_response = None
+            ai_response = self._query_gemini_pricing_insights(
+                cogs_data=cogs_data,
+                product_name=product_name,
+                category=category
+            )
 
-        # Fallback Heuristik Deterministik jika Gemini offline atau gagal
         if not ai_response:
-            if is_at_loss:
-                if margin_status == "CRITICAL_LOSS":
-                    summary = f"PERINGATAN KRITIS: Produk '{product_name or 'ini'}' dijual di bawah titik impas (BEP Rp {bep_price_rounded:,.0f}). Setiap penjualan langsung membakar kas tunai!"
-                    rationale = f"Total HPP riil per pcs adalah Rp {total_unit_cost_hpp:,.0f}. Dengan harga jual saat ini (Rp {cur_price:,.0f}), usaha merugi Rp {total_unit_cost_hpp - cur_price:,.0f} per unit belum termasuk pajak dan biaya operasional."
-                else:
-                    summary = f"WASPADA MARGIN BOCOR: Margin saat ini hanya {current_margin_percent:.1f}%, di bawah batas aman minimum 20%."
-                    rationale = f"Kenaikan harga bahan baku terkini membuat HPP mencapai Rp {total_unit_cost_hpp:,.0f}. Harga jual perlu disesuaikan minimal ke Rp {floor_price_rounded:,.0f} atau optimal Rp {recommended_price_rounded:,.0f}."
-            else:
-                summary = f"Kondisi harga sehat dengan margin kotor {current_margin_percent:.1f}% terhadap HPP riil Rp {total_unit_cost_hpp:,.0f}."
-                rationale = f"Harga jual Rp {cur_price:,.0f} telah mencukupi untuk menutup biaya bahan baku, overhead, susut produksi {safe_wastage_pct}%, dan pajak PP 55 (0.5%)."
-
-            ai_response = {
-                "ai_executive_summary": summary,
-                "ai_financial_rationale": rationale,
-                "cost_driver_analysis": f"Komponen bahan baku '{top_driver_name}' menyumbang {top_driver_share:.1f}% dari total biaya modal. Fokuskan efisiensi pembelian pada bahan ini.",
-                "strategic_actions": [
-                    f"Sesuaikan harga jual ke Rp {recommended_price_rounded:,.0f} untuk mengamankan margin {int(safe_target_margin * 100)}%.",
-                    f"Lakukan negosiasi pembelian grosir untuk bahan '{top_driver_name}' guna menekan HPP.",
-                    "Terapkan paket bundling dengan produk bermargin tinggi jika pelanggan sensitif terhadap kenaikan harga satuan."
-                ],
-                "inflation_resilience_tip": f"Jika harga '{top_driver_name}' naik lebih dari 10% pada restock mendatang, segera lakukan re-pricing otomatis via FINA."
-            }
+            ai_response = _build_pricing_fallback_heuristics(
+                cogs_data=cogs_data,
+                product_name=product_name
+            )
 
         return {
             "product_name": product_name,
             "category": category,
-            "current_selling_price": cur_price,
-            "raw_material_cost": round(raw_material_cost, 2),
-            "wastage_percent": safe_wastage_pct,
-            "wastage_cost": round(wastage_cost, 2),
+            "current_selling_price": cogs_data["cur_price"],
+            "raw_material_cost": round(cogs_data["raw_material_cost"], 2),
+            "wastage_percent": cogs_data["safe_wastage_pct"],
+            "wastage_cost": round(cogs_data["wastage_cost"], 2),
             "overhead_cost_per_unit": round(overhead_cost_per_unit, 2),
-            "total_unit_cost_hpp": round(total_unit_cost_hpp, 2),
-            "pricing_tiers": {
-                "bep_break_even": {
-                    "price": bep_price_rounded,
-                    "margin_percent": 0.5,
-                    "description": "Titik impas modal bahan + overhead + pajak PP55 (Toleransi Nol Margin)"
-                },
-                "safe_floor_minimum": {
-                    "price": floor_price_rounded,
-                    "margin_percent": 20.0,
-                    "description": "Batas bawah aman grosir / reseller anti-rugi (Margin Minimal 20%)"
-                },
-                "optimal_recommended": {
-                    "price": recommended_price_rounded,
-                    "margin_percent": round(safe_target_margin * 100, 1),
-                    "description": f"Rekomendasi AI harga sehat berkelanjutan (Margin {round(safe_target_margin * 100, 1)}%)"
-                },
-                "premium_retail": {
-                    "price": premium_price_rounded,
-                    "margin_percent": 55.0,
-                    "description": "Harga ritel premium saluran khusus (Margin 55%)"
-                }
-            },
-            "current_margin_percent": current_margin_percent,
-            "margin_status": margin_status,
-            "margin_label": margin_label,
-            "is_at_loss": is_at_loss,
-            "detailed_materials_breakdown": detailed_breakdown,
+            "total_unit_cost_hpp": round(cogs_data["total_unit_cost_hpp"], 2),
+            "pricing_tiers": cogs_data["pricing_tiers"],
+            "current_margin_percent": cogs_data["current_margin_percent"],
+            "margin_status": cogs_data["margin_status"],
+            "margin_label": cogs_data["margin_label"],
+            "is_at_loss": cogs_data["is_at_loss"],
+            "detailed_materials_breakdown": cogs_data["detailed_breakdown"],
             "ai_insights": ai_response,
             "engine": "Google-Gemini-Pricing-Optimizer-v2.1"
         }
@@ -825,6 +723,85 @@ class RealAIService:
     # =========================================================================
     # REKOMENDASI AI LLM UNTUK SETUP BAHAN/ALAT MODAL + KATALOG PRODUK POS JUAL
     # =========================================================================
+    def _query_gemini_startup_supplies(
+        self,
+        clean_query: str,
+        budget_estimate: Optional[float],
+        safe_margin: float
+    ) -> Optional[Dict[str, Any]]:
+        """Meminta rekomendasi belanja modal & produk POS dari Google Gemini."""
+        try:
+            sys_prompt = (
+                "Anda adalah Principal AI Business & Accounting Specialist bersertifikasi SAK EMKM "
+                "untuk UMKM Indonesia. Misi Anda adalah menyusun perencanaan finansial dan operasional awal "
+                "secara tepat dan profesional dengan membedakan DUA HAL POKOK:\n"
+                "1. DAFTAR BELANJA MODAL AWAL (supplies_and_equipment): Bahan baku mentah, kemasan, alat kerja, dan energi operasional yang harus dibeli.\n"
+                "2. DAFTAR PRODUK SIAP JUAL DI KASIR POS (finished_products): Menu atau produk jadi olahan atau jasa layanan yang ditawarkan ke konsumen akhir.\n\n"
+                "PRINSIP KRITIS UNTUK SEGALA JENIS USAHA:\n"
+                "- Usaha Olahan/F&B/Marinasi/Manufaktur (PROCESSED_GOODS): Bahan yang dibeli adalah daging mentah, bumbu, plastik vakum, gas elpiji, wadah box. DI KASIR POS yang dijual BUKAN wadah box/plastik/gas/bumbu mentah, melainkan PRODUK JADI seperti 'Ayam Marinasi Bumbu Kuning (1 Ekor)', 'Ikan Nila Marinasi Gurih', dll.\n"
+                "- Usaha Jasa (SERVICE): Bahan yang dibeli adalah deterjen, setrika, pewangi. DI KASIR POS yang dijual adalah LAYANAN JASA seperti 'Cuci + Setrika (Kg)', 'Cuci Bedcover'.\n"
+                "- Usaha Dagang/Ritel (RETAIL): Barang yang dibeli adalah sembako/barang kemasan eceran. DI KASIR POS yang dijual adalah barang dagangan tersebut. Alat kerja seperti timbangan atau kantong kresek TIDAK dijual di kasir."
+            )
+            user_prompt = (
+                f"Pengguna ingin memulai atau menyusun operasional usaha:\n"
+                f"\"{clean_query}\"\n\n"
+                f"Parameter Finansial:\n"
+                f"- Estimasi Anggaran Belanja: {'Rp ' + f'{budget_estimate:,.0f}' if budget_estimate else 'Fleksibel / Sesuai Kebutuhan Efisien'}\n"
+                f"- Target Margin Laba Kotor Minimum: {safe_margin:.1f}%\n\n"
+                f"Instruksi:\n"
+                f"1. Tentukan 'business_model': 'PROCESSED_GOODS' (olahan/kuliner/marinasi/manufaktur), 'SERVICE' (jasa), atau 'RETAIL' (toko/kelontong).\n"
+                f"2. Buatkan 5-8 item 'suggested_items' (kebutuhan belanja bahan baku, kemasan, alat kerja, operasional). Taksir 'estimated_unit_cost' grosir pasar Indonesia. Pada alat kerja, kemasan, dan operasional, isi recommended_selling_price = 0.\n"
+                f"3. Buatkan 3-6 item 'finished_products' (katalog produk/menu/jasa yang dijual di kasir POS). Taksir HPP (cogs) per unit dan hitung selling_price anti-rugi dengan target margin {safe_margin:.1f}%.\n"
+                f"4. Format output HARUS berupa JSON valid tanpa markdown tambahan:\n"
+                f"{{\n"
+                f'  "business_model": "PROCESSED_GOODS",\n'
+                f'  "business_summary": "string ringkasan profil usaha dan pemisahan belanja modal vs produk jualan",\n'
+                f'  "pricing_strategy_notes": "string rekomendasi strategi penetapan harga anti-rugi",\n'
+                f'  "suggested_items": [\n'
+                f'    {{\n'
+                f'      "name": "string nama bahan mentah atau alat",\n'
+                f'      "category": "Bahan Baku | Kemasan | Alat Kerja | Operasional",\n'
+                f'      "quantity": 2,\n'
+                f'      "unit": "Kg | Pcs | Pack | Liter | Unit",\n'
+                f'      "estimated_unit_cost": 35000,\n'
+                f'      "recommended_selling_price": 0,\n'
+                f'      "target_margin_percent": 0,\n'
+                f'      "reason": "string fungsi operasional modal awal"\n'
+                f'    }}\n'
+                f'  ],\n'
+                f'  "finished_products": [\n'
+                f'    {{\n'
+                f'      "name": "string nama produk jadi atau menu siap jual di kasir POS",\n'
+                f'      "category": "Makanan | Minuman | Lauk Olahan | Jasa | Sembako",\n'
+                f'      "unit": "Pack | Porsi | Pcs | Kg | Layanan",\n'
+                f'      "cogs": 25000,\n'
+                f'      "selling_price": 42000,\n'
+                f'      "target_margin_percent": {safe_margin},\n'
+                f'      "stock": 10,\n'
+                f'      "recipe_summary": "string komposisi bahan pembentuk"\n'
+                f'    }}\n'
+                f'  ]\n'
+                f"}}"
+            )
+
+            raw_json = self._call_gemini_text(
+                prompt=user_prompt,
+                system_instruction=sys_prompt,
+                response_json=True
+            )
+            if raw_json:
+                clean = raw_json.strip()
+                if clean.startswith("```json"):
+                    clean = clean[7:]
+                if clean.endswith("```"):
+                    clean = clean[:-3]
+                parsed = json.loads(clean.strip())
+                if isinstance(parsed, dict) and "suggested_items" in parsed:
+                    return parsed
+        except Exception as e:
+            logger.warning(f"[RealAIService] Gagal query Gemini untuk rekomendasi setup bahan & alat: {e}")
+        return None
+
     def recommend_startup_supplies_and_pricing(
         self,
         query: str,
@@ -842,79 +819,12 @@ class RealAIService:
         safe_margin = max(10.0, min(85.0, float(target_margin or 40.0)))
 
         ai_response = None
-
         if self.is_gemini_active and len(clean_query) >= 3:
-            try:
-                sys_prompt = (
-                    "Anda adalah Principal AI Business & Accounting Specialist bersertifikasi SAK EMKM "
-                    "untuk UMKM Indonesia. Misi Anda adalah menyusun perencanaan finansial dan operasional awal "
-                    "secara tepat dan profesional dengan membedakan DUA HAL POKOK:\n"
-                    "1. DAFTAR BELANJA MODAL AWAL (supplies_and_equipment): Bahan baku mentah, kemasan, alat kerja, dan energi operasional yang harus dibeli.\n"
-                    "2. DAFTAR PRODUK SIAP JUAL DI KASIR POS (finished_products): Menu atau produk jadi olahan atau jasa layanan yang ditawarkan ke konsumen akhir.\n\n"
-                    "PRINSIP KRITIS UNTUK SEGALA JENIS USAHA:\n"
-                    "- Usaha Olahan/F&B/Marinasi/Manufaktur (PROCESSED_GOODS): Bahan yang dibeli adalah daging mentah, bumbu, plastik vakum, gas elpiji, wadah box. DI KASIR POS yang dijual BUKAN wadah box/plastik/gas/bumbu mentah, melainkan PRODUK JADI seperti 'Ayam Marinasi Bumbu Kuning (1 Ekor)', 'Ikan Nila Marinasi Gurih', dll.\n"
-                    "- Usaha Jasa (SERVICE): Bahan yang dibeli adalah deterjen, setrika, pewangi. DI KASIR POS yang dijual adalah LAYANAN JASA seperti 'Cuci + Setrika (Kg)', 'Cuci Bedcover'.\n"
-                    "- Usaha Dagang/Ritel (RETAIL): Barang yang dibeli adalah sembako/barang kemasan eceran. DI KASIR POS yang dijual adalah barang dagangan tersebut. Alat kerja seperti timbangan atau kantong kresek TIDAK dijual di kasir."
-                )
-                user_prompt = (
-                    f"Pengguna ingin memulai atau menyusun operasional usaha:\n"
-                    f"\"{clean_query}\"\n\n"
-                    f"Parameter Finansial:\n"
-                    f"- Estimasi Anggaran Belanja: {'Rp ' + f'{budget_estimate:,.0f}' if budget_estimate else 'Fleksibel / Sesuai Kebutuhan Efisien'}\n"
-                    f"- Target Margin Laba Kotor Minimum: {safe_margin:.1f}%\n\n"
-                    f"Instruksi:\n"
-                    f"1. Tentukan 'business_model': 'PROCESSED_GOODS' (olahan/kuliner/marinasi/manufaktur), 'SERVICE' (jasa), atau 'RETAIL' (toko/kelontong).\n"
-                    f"2. Buatkan 5-8 item 'suggested_items' (kebutuhan belanja bahan baku, kemasan, alat kerja, operasional). Taksir 'estimated_unit_cost' grosir pasar Indonesia. Pada alat kerja, kemasan, dan operasional, isi recommended_selling_price = 0.\n"
-                    f"3. Buatkan 3-6 item 'finished_products' (katalog produk/menu/jasa yang dijual di kasir POS). Taksir HPP (cogs) per unit dan hitung selling_price anti-rugi dengan target margin {safe_margin:.1f}%.\n"
-                    f"4. Format output HARUS berupa JSON valid tanpa markdown tambahan:\n"
-                    f"{{\n"
-                    f'  "business_model": "PROCESSED_GOODS",\n'
-                    f'  "business_summary": "string ringkasan profil usaha dan pemisahan belanja modal vs produk jualan",\n'
-                    f'  "pricing_strategy_notes": "string rekomendasi strategi penetapan harga anti-rugi",\n'
-                    f'  "suggested_items": [\n'
-                    f'    {{\n'
-                    f'      "name": "string nama bahan mentah atau alat",\n'
-                    f'      "category": "Bahan Baku | Kemasan | Alat Kerja | Operasional",\n'
-                    f'      "quantity": 2,\n'
-                    f'      "unit": "Kg | Pcs | Pack | Liter | Unit",\n'
-                    f'      "estimated_unit_cost": 35000,\n'
-                    f'      "recommended_selling_price": 0,\n'
-                    f'      "target_margin_percent": 0,\n'
-                    f'      "reason": "string fungsi operasional modal awal"\n'
-                    f'    }}\n'
-                    f'  ],\n'
-                    f'  "finished_products": [\n'
-                    f'    {{\n'
-                    f'      "name": "string nama produk jadi atau menu siap jual di kasir POS",\n'
-                    f'      "category": "Makanan | Minuman | Lauk Olahan | Jasa | Sembako",\n'
-                    f'      "unit": "Pack | Porsi | Pcs | Kg | Layanan",\n'
-                    f'      "cogs": 25000,\n'
-                    f'      "selling_price": 42000,\n'
-                    f'      "target_margin_percent": {safe_margin},\n'
-                    f'      "stock": 10,\n'
-                    f'      "recipe_summary": "string komposisi bahan pembentuk"\n'
-                    f'    }}\n'
-                    f'  ]\n'
-                    f"}}"
-                )
-
-                raw_json = self._call_gemini_text(
-                    prompt=user_prompt,
-                    system_instruction=sys_prompt,
-                    response_json=True
-                )
-                if raw_json:
-                    clean = raw_json.strip()
-                    if clean.startswith("```json"):
-                        clean = clean[7:]
-                    if clean.endswith("```"):
-                        clean = clean[:-3]
-                    parsed = json.loads(clean.strip())
-                    if isinstance(parsed, dict) and "suggested_items" in parsed:
-                        ai_response = parsed
-            except Exception as e:
-                logger.warning(f"[RealAIService] Gagal query Gemini untuk rekomendasi setup bahan & alat: {e}")
-                ai_response = None
+            ai_response = self._query_gemini_startup_supplies(
+                clean_query=clean_query,
+                budget_estimate=budget_estimate,
+                safe_margin=safe_margin
+            )
 
         # Fallback Heuristik Deterministik Berbasis Domain jika Gemini offline / kuota habis
         if not ai_response:
@@ -923,150 +833,341 @@ class RealAIService:
                 target_margin=safe_margin
             )
 
-        # ---------------------------------------------------------------------
-        # Standardisasi & Normalisasi Respons AI
-        # ---------------------------------------------------------------------
-        business_model = str(ai_response.get("business_model", "PROCESSED_GOODS")).upper()
-        if business_model not in ["PROCESSED_GOODS", "SERVICE", "RETAIL"]:
-            business_model = "PROCESSED_GOODS"
+        # Standardisasi & Normalisasi Respons ke Skema Unified
+        return _normalize_startup_recommendations(
+            ai_response=ai_response,
+            clean_query=clean_query,
+            safe_margin=safe_margin
+        )
 
-        # 1. Normalisasi Bahan/Alat Modal Awal (suggested_items)
-        raw_items = ai_response.get("suggested_items", []) if isinstance(ai_response, dict) else []
-        normalized_items: List[Dict[str, Any]] = []
-        for it in raw_items:
-            if not isinstance(it, dict):
+
+# =============================================================================
+# HELPER DOMAIN SERVICE (PRICING MATHEMATICS & DATA NORMALIZATION)
+# =============================================================================
+
+def _compute_cogs_and_pricing_tiers(
+    materials: List[Dict[str, Any]],
+    current_selling_price: float,
+    overhead_cost_per_unit: float = 0.0,
+    wastage_percent: float = 0.0,
+    target_margin_percent: float = 35.0
+) -> Dict[str, Any]:
+    """
+    Kalkulasi matematis HPP riil (Direct Materials + Wastage Yield + Overhead)
+    dan pembentukan 4-Tier Pricing Anti-Rugi (BEP, Floor 20%, Optimal Margin, Premium 55%)
+    sesuai standar SAK EMKM dan PP 55/2022 (PPh Final 0.5%).
+    """
+    tax_pp55_rate = 0.005  # PPh Final 0.5% (PP 55/2022)
+    safe_target_margin = max(15.0, min(80.0, float(target_margin_percent or 35.0))) / 100.0
+    safe_wastage_pct = max(0.0, min(30.0, float(wastage_percent or 0.0)))
+
+    # 1. Hitung biaya bahan baku langsung (Direct Materials Cost)
+    raw_material_cost = 0.0
+    detailed_breakdown = []
+    for m in materials:
+        qty = max(0.0, float(m.get("quantity", m.get("quantity_required", 0.0))))
+        cost_per_u = max(0.0, float(m.get("cost_per_unit", 0.0)))
+        subtotal = qty * cost_per_u
+        raw_material_cost += subtotal
+        detailed_breakdown.append({
+            "material_name": str(m.get("material_name", "Bahan")),
+            "quantity": qty,
+            "unit": str(m.get("unit", "Pcs")),
+            "cost_per_unit": cost_per_u,
+            "subtotal_cost": subtotal,
+            "cost_share_percent": 0.0
+        })
+
+    # Hitung kontribusi biaya per bahan
+    if raw_material_cost > 0:
+        for item in detailed_breakdown:
+            item["cost_share_percent"] = round((item["subtotal_cost"] / raw_material_cost) * 100, 1)
+
+    detailed_breakdown.sort(key=lambda x: x["subtotal_cost"], reverse=True)
+
+    # 2. Faktor susut bahan / yield loss
+    wastage_multiplier = 1.0 / (1.0 - (safe_wastage_pct / 100.0)) if safe_wastage_pct < 99 else 1.0
+    adjusted_material_cost = raw_material_cost * wastage_multiplier
+    wastage_cost = adjusted_material_cost - raw_material_cost
+
+    # 3. Total HPP Unit Riil (Cost of Goods Sold per Unit)
+    safe_overhead = max(0.0, float(overhead_cost_per_unit or 0.0))
+    total_unit_cost_hpp = adjusted_material_cost + safe_overhead
+
+    # 4. Multi-Tier Dynamic Price Calculation (Anti-Rugi & Relevan)
+    if total_unit_cost_hpp > 0:
+        bep_price = total_unit_cost_hpp / (1.0 - tax_pp55_rate)
+        floor_price_min = total_unit_cost_hpp / (1.0 - 0.20 - tax_pp55_rate)
+        recommended_price = total_unit_cost_hpp / (1.0 - safe_target_margin - tax_pp55_rate)
+        premium_price = total_unit_cost_hpp / (1.0 - 0.55 - tax_pp55_rate)
+    else:
+        bep_price = float(current_selling_price or 0.0)
+        floor_price_min = bep_price
+        recommended_price = bep_price
+        premium_price = bep_price
+
+    def _round_retail(p: float) -> float:
+        return float(int((p + 499) // 500) * 500) if p > 0 else 0.0
+
+    bep_price_rounded = _round_retail(bep_price)
+    floor_price_rounded = _round_retail(floor_price_min)
+    recommended_price_rounded = _round_retail(recommended_price)
+    premium_price_rounded = _round_retail(premium_price)
+
+    # 5. Evaluasi Status Margin & Deteksi Kerugian (Margin Leakage Guard)
+    cur_price = float(current_selling_price or 0.0)
+    if cur_price > 0 and total_unit_cost_hpp > 0:
+        current_margin_percent = round(((cur_price - total_unit_cost_hpp) / cur_price) * 100, 1)
+    else:
+        current_margin_percent = 0.0
+
+    if cur_price <= 0:
+        margin_status = "UNPRICED"
+        margin_label = "Harga Belum Ditentukan"
+        is_at_loss = False
+    elif cur_price < bep_price:
+        margin_status = "CRITICAL_LOSS"
+        margin_label = "BAHAYA: RUGI OPERASIONAL!"
+        is_at_loss = True
+    elif cur_price < floor_price_min:
+        margin_status = "MARGIN_LEAKAGE"
+        margin_label = "WASPADA: Margin Terlalu Tipis (< 20%)"
+        is_at_loss = True
+    else:
+        margin_status = "HEALTHY"
+        margin_label = "SEHAT: Margin Berkelanjutan"
+        is_at_loss = False
+
+    pricing_tiers = {
+        "bep_break_even": {
+            "price": bep_price_rounded,
+            "margin_percent": 0.5,
+            "description": "Titik impas modal bahan + overhead + pajak PP55 (Toleransi Nol Margin)"
+        },
+        "safe_floor_minimum": {
+            "price": floor_price_rounded,
+            "margin_percent": 20.0,
+            "description": "Batas bawah aman grosir / reseller anti-rugi (Margin Minimal 20%)"
+        },
+        "optimal_recommended": {
+            "price": recommended_price_rounded,
+            "margin_percent": round(safe_target_margin * 100, 1),
+            "description": f"Rekomendasi AI harga sehat berkelanjutan (Margin {round(safe_target_margin * 100, 1)}%)"
+        },
+        "premium_retail": {
+            "price": premium_price_rounded,
+            "margin_percent": 55.0,
+            "description": "Harga ritel premium saluran khusus (Margin 55%)"
+        }
+    }
+
+    return {
+        "raw_material_cost": raw_material_cost,
+        "safe_wastage_pct": safe_wastage_pct,
+        "wastage_cost": wastage_cost,
+        "overhead_cost_per_unit": safe_overhead,
+        "total_unit_cost_hpp": total_unit_cost_hpp,
+        "bep_price_rounded": bep_price_rounded,
+        "floor_price_rounded": floor_price_rounded,
+        "recommended_price_rounded": recommended_price_rounded,
+        "premium_price_rounded": premium_price_rounded,
+        "safe_target_margin": safe_target_margin,
+        "cur_price": cur_price,
+        "current_margin_percent": current_margin_percent,
+        "margin_status": margin_status,
+        "margin_label": margin_label,
+        "is_at_loss": is_at_loss,
+        "detailed_breakdown": detailed_breakdown,
+        "pricing_tiers": pricing_tiers
+    }
+
+
+def _build_pricing_fallback_heuristics(
+    cogs_data: Dict[str, Any],
+    product_name: str
+) -> Dict[str, Any]:
+    """Menyusun rekomendasi finansial deterministik saat Google Gemini offline / kuota habis."""
+    detailed_breakdown = cogs_data["detailed_breakdown"]
+    top_driver_name = detailed_breakdown[0]["material_name"] if detailed_breakdown else "Bahan Baku"
+    top_driver_share = detailed_breakdown[0]["cost_share_percent"] if detailed_breakdown else 0.0
+    total_unit_cost_hpp = cogs_data["total_unit_cost_hpp"]
+    cur_price = cogs_data["cur_price"]
+    current_margin_percent = cogs_data["current_margin_percent"]
+    floor_price_rounded = cogs_data["floor_price_rounded"]
+    recommended_price_rounded = cogs_data["recommended_price_rounded"]
+    safe_target_margin = cogs_data["safe_target_margin"]
+    bep_price_rounded = cogs_data["bep_price_rounded"]
+    safe_wastage_pct = cogs_data["safe_wastage_pct"]
+
+    if cogs_data["is_at_loss"]:
+        if cogs_data["margin_status"] == "CRITICAL_LOSS":
+            summary = f"PERINGATAN KRITIS: Produk '{product_name or 'ini'}' dijual di bawah titik impas (BEP Rp {bep_price_rounded:,.0f}). Setiap penjualan langsung membakar kas tunai!"
+            rationale = f"Total HPP riil per pcs adalah Rp {total_unit_cost_hpp:,.0f}. Dengan harga jual saat ini (Rp {cur_price:,.0f}), usaha merugi Rp {total_unit_cost_hpp - cur_price:,.0f} per unit belum termasuk pajak dan biaya operasional."
+        else:
+            summary = f"WASPADA MARGIN BOCOR: Margin saat ini hanya {current_margin_percent:.1f}%, di bawah batas aman minimum 20%."
+            rationale = f"Kenaikan harga bahan baku terkini membuat HPP mencapai Rp {total_unit_cost_hpp:,.0f}. Harga jual perlu disesuaikan minimal ke Rp {floor_price_rounded:,.0f} atau optimal Rp {recommended_price_rounded:,.0f}."
+    else:
+        summary = f"Kondisi harga sehat dengan margin kotor {current_margin_percent:.1f}% terhadap HPP riil Rp {total_unit_cost_hpp:,.0f}."
+        rationale = f"Harga jual Rp {cur_price:,.0f} telah mencukupi untuk menutup biaya bahan baku, overhead, susut produksi {safe_wastage_pct}%, dan pajak PP 55 (0.5%)."
+
+    return {
+        "ai_executive_summary": summary,
+        "ai_financial_rationale": rationale,
+        "cost_driver_analysis": f"Komponen bahan baku '{top_driver_name}' menyumbang {top_driver_share:.1f}% dari total biaya modal. Fokuskan efisiensi pembelian pada bahan ini.",
+        "strategic_actions": [
+            f"Sesuaikan harga jual ke Rp {recommended_price_rounded:,.0f} untuk mengamankan margin {int(safe_target_margin * 100)}%.",
+            f"Lakukan negosiasi pembelian grosir untuk bahan '{top_driver_name}' guna menekan HPP.",
+            "Terapkan paket bundling dengan produk bermargin tinggi jika pelanggan sensitif terhadap kenaikan harga satuan."
+        ],
+        "inflation_resilience_tip": f"Jika harga '{top_driver_name}' naik lebih dari 10% pada restock mendatang, segera lakukan re-pricing otomatis via FINA."
+    }
+
+
+def _normalize_startup_recommendations(
+    ai_response: Dict[str, Any],
+    clean_query: str,
+    safe_margin: float
+) -> Dict[str, Any]:
+    """Standardisasi & normalisasi respons AI rekomendasi modal belanja dan produk POS."""
+    business_model = str(ai_response.get("business_model", "PROCESSED_GOODS")).upper()
+    if business_model not in ["PROCESSED_GOODS", "SERVICE", "RETAIL"]:
+        business_model = "PROCESSED_GOODS"
+
+    # 1. Normalisasi Bahan/Alat Modal Awal (suggested_items)
+    raw_items = ai_response.get("suggested_items", []) if isinstance(ai_response, dict) else []
+    normalized_items: List[Dict[str, Any]] = []
+    for it in raw_items:
+        if not isinstance(it, dict):
+            continue
+        cat = str(it.get("category", "Bahan Baku"))
+        is_equip = bool(
+            it.get("is_equipment") or
+            any(k in cat.lower() for k in ["alat", "mesin", "peralatan", "peralatan & mesin", "operasional"])
+        )
+        u_cost = float(it.get("estimated_unit_cost", it.get("unit_cost", 0)))
+
+        # Jika item adalah alat kerja, kemasan, atau operasional, pastikan harga jual = 0 (bukan untuk dijual eceran di POS)
+        if is_equip or "kemasan" in cat.lower() or "operasional" in cat.lower() or business_model != "RETAIL":
+            s_price = 0.0
+            m_pct = 0.0
+        else:
+            s_price = float(it.get("recommended_selling_price", it.get("selling_price", 0)))
+            m_pct = float(it.get("target_margin_percent", it.get("margin_percent", safe_margin)))
+
+        rsn = str(it.get("reason", it.get("rationale", "")))
+
+        normalized_items.append({
+            "name": str(it.get("name", "Bahan/Alat")),
+            "category": cat,
+            "quantity": max(1, int(it.get("quantity", 1))),
+            "unit": str(it.get("unit", "Pcs")),
+            "estimated_unit_cost": u_cost,
+            "unit_cost": u_cost,
+            "recommended_selling_price": s_price,
+            "selling_price": s_price,
+            "target_margin_percent": m_pct,
+            "margin_percent": m_pct,
+            "is_equipment": is_equip,
+            "reason": rsn,
+            "rationale": rsn
+        })
+
+    # 2. Normalisasi Produk Jadi Siap Jual di POS (finished_products)
+    raw_finished = ai_response.get("finished_products", []) if isinstance(ai_response, dict) else []
+    normalized_finished: List[Dict[str, Any]] = []
+
+    if raw_finished and isinstance(raw_finished, list):
+        for fp in raw_finished:
+            if not isinstance(fp, dict):
                 continue
-            cat = str(it.get("category", "Bahan Baku"))
-            is_equip = bool(
-                it.get("is_equipment") or
-                any(k in cat.lower() for k in ["alat", "mesin", "peralatan", "peralatan & mesin", "operasional"])
-            )
-            u_cost = float(it.get("estimated_unit_cost", it.get("unit_cost", 0)))
-            
-            # Jika item adalah alat kerja, kemasan, atau operasional, pastikan harga jual = 0 (bukan untuk dijual eceran di POS)
-            if is_equip or "kemasan" in cat.lower() or "operasional" in cat.lower() or business_model != "RETAIL":
-                s_price = 0.0
-                m_pct = 0.0
-            else:
-                s_price = float(it.get("recommended_selling_price", it.get("selling_price", 0)))
-                m_pct = float(it.get("target_margin_percent", it.get("margin_percent", safe_margin)))
+            cogs_val = float(fp.get("cogs", fp.get("estimated_cogs", 0)))
+            sell_val = float(fp.get("selling_price", fp.get("recommended_selling_price", 0)))
+            m_pct = float(fp.get("target_margin_percent", safe_margin))
 
-            rsn = str(it.get("reason", it.get("rationale", "")))
+            if sell_val <= 0 and cogs_val > 0:
+                raw_p = cogs_val / max(0.1, (1.0 - (m_pct / 100.0)))
+                sell_val = float(round(raw_p / 500) * 500)
 
-            normalized_items.append({
-                "name": str(it.get("name", "Bahan/Alat")),
-                "category": cat,
-                "quantity": max(1, int(it.get("quantity", 1))),
-                "unit": str(it.get("unit", "Pcs")),
-                "estimated_unit_cost": u_cost,
-                "unit_cost": u_cost,
-                "recommended_selling_price": s_price,
-                "selling_price": s_price,
+            normalized_finished.append({
+                "name": str(fp.get("name", "Produk Siap Jual")),
+                "category": str(fp.get("category", "Lauk Olahan" if "marinasi" in clean_query.lower() else "Makanan")),
+                "unit": str(fp.get("unit", "Pack" if "marinasi" in clean_query.lower() else "Porsi")),
+                "cogs": cogs_val,
+                "selling_price": sell_val,
                 "target_margin_percent": m_pct,
-                "margin_percent": m_pct,
-                "is_equipment": is_equip,
-                "reason": rsn,
-                "rationale": rsn
+                "stock": max(1, int(fp.get("stock", 10))),
+                "recipe_summary": str(fp.get("recipe_summary", ""))
             })
 
-        # 2. Normalisasi Produk Jadi Siap Jual di POS (finished_products)
-        raw_finished = ai_response.get("finished_products", []) if isinstance(ai_response, dict) else []
-        normalized_finished: List[Dict[str, Any]] = []
+    # Fallback jika model AI belum menghasilkan finished_products secara eksplisit
+    if not normalized_finished:
+        if business_model == "RETAIL":
+            for it in normalized_items:
+                if not it["is_equipment"] and "kemasan" not in it["category"].lower():
+                    cogs_it = it["unit_cost"]
+                    sell_it = it["selling_price"] if it["selling_price"] > 0 else (cogs_it * 1.2)
+                    normalized_finished.append({
+                        "name": it["name"],
+                        "category": it["category"],
+                        "unit": it["unit"],
+                        "cogs": cogs_it,
+                        "selling_price": sell_it,
+                        "target_margin_percent": 15.0,
+                        "stock": it["quantity"],
+                        "recipe_summary": "Barang dagangan eceran"
+                    })
+        else:
+            normalized_finished = [
+                {
+                    "name": f"Paket {clean_query.title()} Siap Jual",
+                    "category": "Produk Olahan",
+                    "unit": "Pack",
+                    "cogs": 25000.0,
+                    "selling_price": float(round((25000.0 / max(0.1, (1.0 - safe_margin / 100.0))) / 500) * 500),
+                    "target_margin_percent": safe_margin,
+                    "stock": 10,
+                    "recipe_summary": "Racikan olahan bahan baku pilihan"
+                }
+            ]
 
-        if raw_finished and isinstance(raw_finished, list):
-            for fp in raw_finished:
-                if not isinstance(fp, dict):
-                    continue
-                cogs_val = float(fp.get("cogs", fp.get("estimated_cogs", 0)))
-                sell_val = float(fp.get("selling_price", fp.get("recommended_selling_price", 0)))
-                m_pct = float(fp.get("target_margin_percent", safe_margin))
+    # 3. Metrik Agregat Finansial
+    total_estimated_budget = sum(
+        float(item["quantity"]) * float(item["unit_cost"])
+        for item in normalized_items
+    )
 
-                if sell_val <= 0 and cogs_val > 0:
-                    raw_p = cogs_val / max(0.1, (1.0 - (m_pct / 100.0)))
-                    sell_val = float(round(raw_p / 500) * 500)
+    potential_revenue = sum(
+        float(item["stock"]) * float(item["selling_price"])
+        for item in normalized_finished
+    )
 
-                normalized_finished.append({
-                    "name": str(fp.get("name", "Produk Siap Jual")),
-                    "category": str(fp.get("category", "Lauk Olahan" if "marinasi" in clean_query.lower() else "Makanan")),
-                    "unit": str(fp.get("unit", "Pack" if "marinasi" in clean_query.lower() else "Porsi")),
-                    "cogs": cogs_val,
-                    "selling_price": sell_val,
-                    "target_margin_percent": m_pct,
-                    "stock": max(1, int(fp.get("stock", 10))),
-                    "recipe_summary": str(fp.get("recipe_summary", ""))
-                })
+    total_cogs = sum(
+        float(item["stock"]) * float(item["cogs"])
+        for item in normalized_finished
+    )
+    gross_profit = max(0.0, potential_revenue - total_cogs)
+    avg_margin = (gross_profit / potential_revenue * 100.0) if potential_revenue > 0 else safe_margin
 
-        # Fallback jika model AI belum menghasilkan finished_products secara eksplisit:
-        if not normalized_finished:
-            # Jika retail, ambil barang sembako/dagangan
-            if business_model == "RETAIL":
-                for it in normalized_items:
-                    if not it["is_equipment"] and "kemasan" not in it["category"].lower():
-                        cogs_it = it["unit_cost"]
-                        sell_it = it["selling_price"] if it["selling_price"] > 0 else (cogs_it * 1.2)
-                        normalized_finished.append({
-                            "name": it["name"],
-                            "category": it["category"],
-                            "unit": it["unit"],
-                            "cogs": cogs_it,
-                            "selling_price": sell_it,
-                            "target_margin_percent": 15.0,
-                            "stock": it["quantity"],
-                            "recipe_summary": "Barang dagangan eceran"
-                        })
-            else:
-                # Olahan / Jasa default
-                normalized_finished = [
-                    {
-                        "name": f"Paket {clean_query.title()} Siap Jual",
-                        "category": "Produk Olahan",
-                        "unit": "Pack",
-                        "cogs": 25000.0,
-                        "selling_price": float(round((25000.0 / max(0.1, (1.0 - safe_margin / 100.0))) / 500) * 500),
-                        "target_margin_percent": safe_margin,
-                        "stock": 10,
-                        "recipe_summary": "Racikan olahan bahan baku pilihan"
-                    }
-                ]
+    summary_text = str(ai_response.get("business_summary", f"Analisis Kebutuhan Usaha '{clean_query}'"))
+    pricing_notes = str(ai_response.get("pricing_strategy_notes", f"Terapkan margin {safe_margin:.0f}% untuk mengamankan kas operasional."))
 
-        # 3. Metrik Agregat Finansial
-        total_estimated_budget = sum(
-            float(item["quantity"]) * float(item["unit_cost"])
-            for item in normalized_items
-        )
-
-        potential_revenue = sum(
-            float(item["stock"]) * float(item["selling_price"])
-            for item in normalized_finished
-        )
-
-        total_cogs = sum(
-            float(item["stock"]) * float(item["cogs"])
-            for item in normalized_finished
-        )
-        gross_profit = max(0.0, potential_revenue - total_cogs)
-        avg_margin = (gross_profit / potential_revenue * 100.0) if potential_revenue > 0 else safe_margin
-
-        summary_text = str(ai_response.get("business_summary", f"Analisis Kebutuhan Usaha '{clean_query}'"))
-        pricing_notes = str(ai_response.get("pricing_strategy_notes", f"Terapkan margin {safe_margin:.0f}% untuk mengamankan kas operasional."))
-
-        return {
-            "business_model": business_model,
-            "business_summary": summary_text,
-            "business_type": summary_text,
-            "suggested_items": normalized_items,
-            "recommended_items": normalized_items,
-            "finished_products": normalized_finished,
-            "saleable_products": normalized_finished,
-            "pricing_strategy_notes": pricing_notes,
-            "advice": pricing_notes,
-            "total_estimated_budget": round(total_estimated_budget, 2),
-            "potential_revenue": round(potential_revenue, 2),
-            "total_potential_revenue": round(potential_revenue, 2),
-            "estimated_gross_profit": round(gross_profit, 2),
-            "average_margin_percent": round(avg_margin, 1),
-            "engine": str(ai_response.get("engine", "Google-Gemini-LLM-v2.5"))
-        }
+    return {
+        "business_model": business_model,
+        "business_summary": summary_text,
+        "business_type": summary_text,
+        "suggested_items": normalized_items,
+        "recommended_items": normalized_items,
+        "finished_products": normalized_finished,
+        "saleable_products": normalized_finished,
+        "pricing_strategy_notes": pricing_notes,
+        "advice": pricing_notes,
+        "total_estimated_budget": round(total_estimated_budget, 2),
+        "potential_revenue": round(potential_revenue, 2),
+        "total_potential_revenue": round(potential_revenue, 2),
+        "estimated_gross_profit": round(gross_profit, 2),
+        "average_margin_percent": round(avg_margin, 1),
+        "engine": str(ai_response.get("engine", "Google-Gemini-LLM-v2.5"))
+    }
 
 
 # Singleton Instance
