@@ -212,10 +212,14 @@ export interface SetupAIRecommendedItem {
   quantity: number;
   unit: string;
   unit_cost: number;
+  estimated_unit_cost?: number;
   selling_price: number;
+  recommended_selling_price?: number;
   margin_percent: number;
+  target_margin_percent?: number;
   is_equipment: boolean;
   rationale: string;
+  reason?: string;
 }
 
 export interface SetupAIRecommendationRequest {
@@ -226,10 +230,14 @@ export interface SetupAIRecommendationRequest {
 
 export interface SetupAIRecommendationResponse {
   business_type: string;
+  business_summary?: string;
   advice: string;
+  pricing_strategy_notes?: string;
   recommended_items: SetupAIRecommendedItem[];
+  suggested_items?: SetupAIRecommendedItem[];
   total_estimated_budget: number;
   total_potential_revenue: number;
+  potential_revenue?: number;
   estimated_gross_profit: number;
   average_margin_percent: number;
 }

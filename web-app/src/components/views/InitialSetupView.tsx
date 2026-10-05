@@ -313,7 +313,7 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
           Setup Saldo Awal
         </h1>
         <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>
-          Atur kas, persediaan barang, dan aset awal {businessName}.
+          Alokasikan modal awal, kebutuhan bahan, dan peralatan usaha.
         </p>
       </div>
 
@@ -339,15 +339,15 @@ export const InitialSetupView: React.FC<InitialSetupViewProps> = ({ onSetupCompl
         <div style={{ marginBottom: '18px' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#FFFFFF' }}>
             {step === 1 && 'Kas & Saldo Bank'}
-            {step === 2 && 'Bahan & Alat Usaha yang Dibutuhkan'}
-            {step === 3 && 'Aset Tetap Usaha'}
-            {step === 4 && 'Review & Konfirmasi'}
+            {step === 2 && 'Bahan & Alat Usaha'}
+            {step === 3 && 'Aset Tetap'}
+            {step === 4 && 'Konfirmasi Saldo'}
           </h3>
           <p style={{ color: '#94a3b8', fontSize: '0.80rem', margin: '3px 0 0 0' }}>
-            {step === 1 && 'Masukkan uang tunai di kasir dan saldo rekening bank usaha.'}
-            {step === 2 && 'Daftar belanja bahan baku dan alat kerja untuk memulai usaha, lengkap dengan kalkulator anti-rugi dan rekomendasi AI.'}
-            {step === 3 && 'Peralatan operasional, mesin, atau kendaraan yang dimiliki usaha.'}
-            {step === 4 && 'Periksa rincian saldo awal sebelum disimpan ke sistem.'}
+            {step === 1 && 'Tentukan saldo uang tunai dan rekening bank untuk modal usaha.'}
+            {step === 2 && 'Daftar kebutuhan bahan baku dan alat kerja operasional.'}
+            {step === 3 && 'Peralatan besar atau kendaraan yang dimiliki usaha.'}
+            {step === 4 && 'Ringkasan neraca pembukaan sebelum dibukukan.'}
           </p>
         </div>
 
