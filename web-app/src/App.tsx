@@ -7,20 +7,22 @@ import { LoginView } from './components/views/LoginView';
 import { SuspenseLoader } from './components/SuspenseLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Lazy Loaded Workspace Modules (Code Splitting & Suspense-first Architecture)
-const CockpitView = React.lazy(() => import('./components/views/CockpitView').then(m => ({ default: m.CockpitView })));
-const POSView = React.lazy(() => import('./components/views/POSView').then(m => ({ default: m.POSView })));
-const LedgerView = React.lazy(() => import('./components/views/LedgerView').then(m => ({ default: m.LedgerView })));
-const MonteCarloView = React.lazy(() => import('./components/views/MonteCarloView').then(m => ({ default: m.MonteCarloView })));
-const LoanDeobfuscatorView = React.lazy(() => import('./components/views/LoanDeobfuscatorView').then(m => ({ default: m.LoanDeobfuscatorView })));
-const ForensicsView = React.lazy(() => import('./components/views/ForensicsView').then(m => ({ default: m.ForensicsView })));
-const PriceBenchmarkView = React.lazy(() => import('./components/views/PriceBenchmarkView').then(m => ({ default: m.PriceBenchmarkView })));
-const DunningView = React.lazy(() => import('./components/views/DunningView').then(m => ({ default: m.DunningView })));
-const VoiceDialectView = React.lazy(() => import('./components/views/VoiceDialectView').then(m => ({ default: m.VoiceDialectView })));
-const StaffManagementView = React.lazy(() => import('./components/views/StaffManagementView').then(m => ({ default: m.StaffManagementView })));
-const CSStaffLoginView = React.lazy(() => import('./components/views/CSStaffLoginView').then(m => ({ default: m.CSStaffLoginView })));
-const CSSupportDeskView = React.lazy(() => import('./components/views/CSSupportDeskView').then(m => ({ default: m.CSSupportDeskView })));
-const InitialSetupView = React.lazy(() => import('./components/views/InitialSetupView').then(m => ({ default: m.InitialSetupView })));
+import { lazyWithRetry } from './utils/lazyWithRetry';
+
+// Lazy Loaded Workspace Modules (Resilient Code Splitting with Auto Stale-Chunk Recovery)
+const CockpitView = lazyWithRetry(() => import('./components/views/CockpitView').then(m => ({ default: m.CockpitView })), 'CockpitView');
+const POSView = lazyWithRetry(() => import('./components/views/POSView').then(m => ({ default: m.POSView })), 'POSView');
+const LedgerView = lazyWithRetry(() => import('./components/views/LedgerView').then(m => ({ default: m.LedgerView })), 'LedgerView');
+const MonteCarloView = lazyWithRetry(() => import('./components/views/MonteCarloView').then(m => ({ default: m.MonteCarloView })), 'MonteCarloView');
+const LoanDeobfuscatorView = lazyWithRetry(() => import('./components/views/LoanDeobfuscatorView').then(m => ({ default: m.LoanDeobfuscatorView })), 'LoanDeobfuscatorView');
+const ForensicsView = lazyWithRetry(() => import('./components/views/ForensicsView').then(m => ({ default: m.ForensicsView })), 'ForensicsView');
+const PriceBenchmarkView = lazyWithRetry(() => import('./components/views/PriceBenchmarkView').then(m => ({ default: m.PriceBenchmarkView })), 'PriceBenchmarkView');
+const DunningView = lazyWithRetry(() => import('./components/views/DunningView').then(m => ({ default: m.DunningView })), 'DunningView');
+const VoiceDialectView = lazyWithRetry(() => import('./components/views/VoiceDialectView').then(m => ({ default: m.VoiceDialectView })), 'VoiceDialectView');
+const StaffManagementView = lazyWithRetry(() => import('./components/views/StaffManagementView').then(m => ({ default: m.StaffManagementView })), 'StaffManagementView');
+const CSStaffLoginView = lazyWithRetry(() => import('./components/views/CSStaffLoginView').then(m => ({ default: m.CSStaffLoginView })), 'CSStaffLoginView');
+const CSSupportDeskView = lazyWithRetry(() => import('./components/views/CSSupportDeskView').then(m => ({ default: m.CSSupportDeskView })), 'CSSupportDeskView');
+const InitialSetupView = lazyWithRetry(() => import('./components/views/InitialSetupView').then(m => ({ default: m.InitialSetupView })), 'InitialSetupView');
 import { SupportReportModal } from './components/views/SupportReportModal';
 
 import type { NavigationTab, KPIStats, Tenant, UserRole, AppPage, SupportTicket, AgentTraceEvent } from './types';
@@ -300,7 +302,7 @@ export const App: React.FC = () => {
       <ErrorBoundary fallbackMessage="Kendala autentikasi staf Customer Support">
         <React.Suspense fallback={<SuspenseLoader message="Menyiapkan Portal Staf CS..." />}>
           <CSStaffLoginView 
-            onLoginSuccess={(role, targetPage) => {
+            onLoginSuccess={(role: UserRole, targetPage: AppPage) => {
               setUserRole(role);
               setCurrentPage(targetPage);
             }}
