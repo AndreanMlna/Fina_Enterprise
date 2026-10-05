@@ -960,33 +960,71 @@ class RealAIService:
                 "engine": "FINA-Deterministic-Heuristic-Engine"
             }
 
-        # Kalkulasi Metrik Agregat Finansial
-        suggested_items = ai_response.get("suggested_items", [])
+        # Kalkulasi Metrik Agregat Finansial dengan type-safety ketat
+        raw_items = ai_response.get("suggested_items", []) if isinstance(ai_response, dict) else []
+        suggested_items: List[Dict[str, Any]] = [
+            it for it in raw_items if isinstance(it, dict)
+        ]
+
         total_estimated_budget = sum(
-            float(item.get("quantity", 1)) * float(item.get("estimated_unit_cost", 0))
+            float(item.get("quantity", 1)) * float(item.get("estimated_unit_cost", item.get("unit_cost", 0)))
             for item in suggested_items
         )
         potential_revenue = sum(
-            float(item.get("quantity", 1)) * float(item.get("recommended_selling_price", 0))
+            float(item.get("quantity", 1)) * float(item.get("recommended_selling_price", item.get("selling_price", 0)))
             for item in suggested_items
-            if float(item.get("recommended_selling_price", 0)) > 0
+            if float(item.get("recommended_selling_price", item.get("selling_price", 0))) > 0
         )
 
         margins = [
-            float(item.get("target_margin_percent", 0))
+            float(item.get("target_margin_percent", item.get("margin_percent", 0)))
             for item in suggested_items
-            if float(item.get("recommended_selling_price", 0)) > 0
+            if float(item.get("recommended_selling_price", item.get("selling_price", 0))) > 0
         ]
         avg_margin = sum(margins) / len(margins) if margins else safe_margin
+        gross_profit = max(0.0, potential_revenue - total_estimated_budget)
+
+        # Standardisasi atribut item agar kompatibel dengan frontend & backend
+        normalized_items: List[Dict[str, Any]] = []
+        for it in suggested_items:
+            u_cost = float(it.get("estimated_unit_cost", it.get("unit_cost", 0)))
+            s_price = float(it.get("recommended_selling_price", it.get("selling_price", 0)))
+            m_pct = float(it.get("target_margin_percent", it.get("margin_percent", safe_margin)))
+            is_equip = bool(it.get("is_equipment", "alat" in str(it.get("category", "")).lower() or "mesin" in str(it.get("category", "")).lower()))
+            rsn = str(it.get("reason", it.get("rationale", "")))
+
+            normalized_items.append({
+                "name": str(it.get("name", "Bahan/Alat")),
+                "category": str(it.get("category", "Bahan Baku")),
+                "quantity": int(it.get("quantity", 1)),
+                "unit": str(it.get("unit", "Pcs")),
+                "estimated_unit_cost": u_cost,
+                "unit_cost": u_cost,
+                "recommended_selling_price": s_price,
+                "selling_price": s_price,
+                "target_margin_percent": m_pct,
+                "margin_percent": m_pct,
+                "is_equipment": is_equip,
+                "reason": rsn,
+                "rationale": rsn
+            })
+
+        summary_text = str(ai_response.get("business_summary", f"Analisis Kebutuhan Awal untuk {clean_query}"))
+        pricing_notes = str(ai_response.get("pricing_strategy_notes", "Tentukan harga jual dengan margin minimal 30% untuk mengamankan kas operasional."))
 
         return {
-            "business_summary": ai_response.get("business_summary", f"Analisis Kebutuhan Awal untuk {clean_query}"),
-            "suggested_items": suggested_items,
-            "pricing_strategy_notes": ai_response.get("pricing_strategy_notes", "Tentukan harga jual dengan margin minimal 30% untuk mengamankan kas operasional."),
+            "business_summary": summary_text,
+            "business_type": summary_text,
+            "suggested_items": normalized_items,
+            "recommended_items": normalized_items,
+            "pricing_strategy_notes": pricing_notes,
+            "advice": pricing_notes,
             "total_estimated_budget": round(total_estimated_budget, 2),
             "potential_revenue": round(potential_revenue, 2),
+            "total_potential_revenue": round(potential_revenue, 2),
+            "estimated_gross_profit": round(gross_profit, 2),
             "average_margin_percent": round(avg_margin, 1),
-            "engine": ai_response.get("engine", "Google-Gemini-LLM-v2.5")
+            "engine": str(ai_response.get("engine", "Google-Gemini-LLM-v2.5"))
         }
 
 

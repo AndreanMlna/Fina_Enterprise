@@ -175,10 +175,13 @@ async def recommend_startup_supplies(
     sesuai jenis usaha UMKM dan estimasi budget modal pemilik.
     """
     try:
-        recommendation = await ai_service.recommend_startup_supplies_and_pricing(
-            query=payload.query,
+        query_text = payload.query or payload.business_type_or_query or ""
+        margin_val = float(payload.target_margin if payload.target_margin is not None else (payload.target_margin_percent or 40.0))
+
+        recommendation = ai_service.recommend_startup_supplies_and_pricing(
+            query=query_text,
             budget_estimate=payload.budget_estimate,
-            target_margin=payload.target_margin,
+            target_margin=margin_val,
         )
         return recommendation
     except Exception as e:
