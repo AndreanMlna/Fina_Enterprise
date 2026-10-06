@@ -488,5 +488,22 @@ export interface InventorySummary {
   equipment_assets: InventoryItem[];
 }
 
+export interface AutomationScheduleItem {
+  id: string;
+  task_key: string;
+  category: 'ALL' | 'SWEEPING' | 'DUNNING' | 'AUDIT';
+  title: string;
+  subtitle: string;
+  source_engine: string;
+  time_range: string;
+  cron_expression: string;
+  is_active: boolean;
+  status: 'ACTIVE' | 'PAUSED';
+  target_action_tab?: NavigationTab;
+  action_label: string;
+  last_run_at?: string;
+  realtime_metric?: Record<string, any>;
+}
+
 
 

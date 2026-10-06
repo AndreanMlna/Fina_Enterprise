@@ -11,8 +11,8 @@
  *   - CockpitQuickLaunch: Pintasan cepat modul otonom
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import type { KPIStats, NavigationTab, Tenant, StaffMember } from '../../types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import type { KPIStats, NavigationTab, Tenant, StaffMember, AutomationScheduleItem } from '../../types';
 import type { LedgerEntry } from '../../services/types';
 import { api } from '../../services/api';
 import { formatCurrency } from '../../utils';
@@ -22,7 +22,8 @@ import {
   CockpitLiquidityCard,
   CockpitStaffCard,
   CockpitTableCard,
-  CockpitQuickLaunch
+  CockpitQuickLaunch,
+  AutomationScheduleModal
 } from '../cockpit';
 import type { TelemetryEvent, TransactionRow } from '../cockpit';
 
@@ -39,27 +40,34 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
   const [tableMode, setTableMode] = useState<'TRANSACTIONS' | 'STAFF'>('TRANSACTIONS');
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [liveEntries, setLiveEntries] = useState<LedgerEntry[]>([]);
+  const [dbAutomations, setDbAutomations] = useState<AutomationScheduleItem[]>([]);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
   // Sinkronisasi data live dari PostgreSQL 16
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        const [staffData, vouchersData] = await Promise.allSettled([
-          api.getStaffList(),
-          api.getLedgerEntries()
-        ]);
-        if (staffData.status === 'fulfilled' && Array.isArray(staffData.value)) {
-          setStaffList(staffData.value);
-        }
-        if (vouchersData.status === 'fulfilled' && Array.isArray(vouchersData.value)) {
-          setLiveEntries(vouchersData.value);
-        }
-      } catch (err) {
-        console.warn("[CockpitView] Gagal mengambil data live dashboard:", err);
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [staffData, vouchersData, automationsData] = await Promise.allSettled([
+        api.getStaffList(),
+        api.getLedgerEntries(),
+        api.getAutomations()
+      ]);
+      if (staffData.status === 'fulfilled' && Array.isArray(staffData.value)) {
+        setStaffList(staffData.value);
       }
-    };
+      if (vouchersData.status === 'fulfilled' && Array.isArray(vouchersData.value)) {
+        setLiveEntries(vouchersData.value);
+      }
+      if (automationsData.status === 'fulfilled' && Array.isArray(automationsData.value) && automationsData.value.length > 0) {
+        setDbAutomations(automationsData.value);
+      }
+    } catch (err) {
+      console.warn("[CockpitView] Gagal mengambil data live dashboard:", err);
+    }
+  }, []);
+
+  useEffect(() => {
     loadDashboardData();
-  }, [tenant?.id]);
+  }, [tenant?.id, loadDashboardData]);
 
   // Tanggal terformat dinamis bahasa Indonesia baku
   const formattedToday = useMemo(() => {
@@ -72,8 +80,25 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
     return `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
   }, []);
 
-  // Event otomasi & jadwal operasional sistem
+  // Event otomasi & jadwal operasional sistem terintegrasi database
   const telemetryEvents: TelemetryEvent[] = useMemo(() => {
+    // 1. Jika data jadwal tersimpan di PostgreSQL tersedia, petakan langsung dari DB
+    if (dbAutomations && dbAutomations.length > 0) {
+      return dbAutomations.map(item => ({
+        id: item.id,
+        category: item.category,
+        title: item.title,
+        subtitle: item.subtitle,
+        source: item.source_engine,
+        timeRange: item.time_range,
+        status: item.is_active ? 'ACTIVE' : 'NORMAL',
+        avatars: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=60'],
+        actionTab: item.target_action_tab,
+        actionLabel: item.action_label
+      }));
+    }
+
+    // 2. Fallback komputasi lokal jika offline
     const hasCashSurplus = kpi.liquidCash > kpi.safetyBuffer && kpi.safetyBuffer > 0;
     const surplusAmount = hasCashSurplus ? kpi.liquidCash - kpi.safetyBuffer : 0;
 
@@ -119,7 +144,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
         actionLabel: 'Buka Penagihan'
       }
     ];
-  }, [kpi]);
+  }, [dbAutomations, kpi]);
 
   // Transaksi buku besar & POS riil tersinkronisasi
   const transactions: TransactionRow[] = useMemo(() => {
@@ -199,6 +224,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
           activeFilter={activeTelemetryFilter}
           onFilterChange={setActiveTelemetryFilter}
           onNavigate={onNavigate}
+          onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
         />
 
         {/* CARD 2: Kinerja Likuiditas & Efisiensi Arus Kas */}
@@ -231,6 +257,14 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
 
       {/* 4. ENTERPRISE QUICK LAUNCHPAD */}
       <CockpitQuickLaunch onNavigate={onNavigate} />
+
+      {/* 5. MODAL KONFIGURASI JADWAL & OTOMASI TENANT (POSTGRESQL ACID) */}
+      <AutomationScheduleModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        automations={dbAutomations}
+        onRefresh={loadDashboardData}
+      />
 
     </div>
   );

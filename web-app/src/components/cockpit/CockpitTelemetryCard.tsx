@@ -20,17 +20,24 @@ interface CockpitTelemetryCardProps {
   activeFilter: 'ALL' | 'SWEEPING' | 'DUNNING' | 'AUDIT';
   onFilterChange: (filter: 'ALL' | 'SWEEPING' | 'DUNNING' | 'AUDIT') => void;
   onNavigate: (tab: NavigationTab) => void;
+  onOpenScheduleModal?: () => void;
 }
 
 export const CockpitTelemetryCard: React.FC<CockpitTelemetryCardProps> = ({
   telemetryEvents,
   activeFilter,
   onFilterChange,
-  onNavigate
+  onNavigate,
+  onOpenScheduleModal
 }) => {
   const filteredTelemetry = activeFilter === 'ALL'
     ? telemetryEvents
     : telemetryEvents.filter(e => e.category === activeFilter);
+
+  const dynamicDateLabel = React.useMemo(() => {
+    const d = new Date();
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ▾';
+  }, []);
 
   return (
     <div className="homies-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column' }}>
@@ -44,16 +51,24 @@ export const CockpitTelemetryCard: React.FC<CockpitTelemetryCardProps> = ({
               border: '1px solid rgba(255, 255, 255, 0.08)',
               color: '#e2e8f0',
               fontSize: '0.74rem',
-              padding: '3px 10px'
+              padding: '3px 10px',
+              cursor: 'pointer'
             }}
+            onClick={onOpenScheduleModal}
+            title="Klik untuk mengatur preferensi jadwal & otomasi"
           >
-            1 Okt 2026 ▾
+            {dynamicDateLabel}
           </button>
           <h3 style={{ fontSize: '0.94rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
             Otomasi & Jadwal
           </h3>
         </div>
-        <button className="homies-icon-btn" style={{ width: '28px', height: '28px' }}>
+        <button 
+          className="homies-icon-btn" 
+          style={{ width: '28px', height: '28px', cursor: 'pointer' }}
+          onClick={onOpenScheduleModal}
+          title="Konfigurasi Jadwal & Otomasi Tenant (PostgreSQL)"
+        >
           <MoreHorizontal size={14} />
         </button>
       </div>

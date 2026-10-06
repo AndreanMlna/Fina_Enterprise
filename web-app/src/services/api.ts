@@ -53,6 +53,9 @@ class ApiService {
   getSAKEMKMReport = ledgerService.getSAKEMKMReport.bind(ledgerService);
   getKPIDashboard = ledgerService.getKPIDashboard.bind(ledgerService);
   getRunwayBaseline = ledgerService.getRunwayBaseline.bind(ledgerService);
+  getAutomations = ledgerService.getAutomations.bind(ledgerService);
+  updateAutomation = ledgerService.updateAutomation.bind(ledgerService);
+  runAutomation = ledgerService.runAutomation.bind(ledgerService);
 
   // --- Domain: Kasir Point of Sale (POS) & Pricing Intelligence ---
   getPOSProducts = posService.getPOSProducts.bind(posService);

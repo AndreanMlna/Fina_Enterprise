@@ -25,6 +25,17 @@ async def lifespan(app: FastAPI):
     print(f"[{settings.PROJECT_NAME}] Database Target: {settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}")
     print(f"[{settings.PROJECT_NAME}] Regulatory: SAK EMKM Double-Entry & UU PDP No. 27/2022 Active")
     print(f"[{settings.PROJECT_NAME}] API Routers: auth, ledger, invoices, kpi, dialects, support, pos, benchmarks, loans, forensics, setup")
+    
+    # Inisialisasi skema basis data secara aman & idempotensial
+    try:
+        from app.infrastructure.database import engine, Base
+        import app.domain.models  # Pastikan seluruh model terdaftar
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print(f"[{settings.PROJECT_NAME}] Database schemas verified and synced.")
+    except Exception as e:
+        print(f"[{settings.PROJECT_NAME}] Warning saat sync skema database: {e}")
+
     yield
     print(f"[{settings.PROJECT_NAME}] Shutting down gracefully...")
 

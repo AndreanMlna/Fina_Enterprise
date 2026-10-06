@@ -6,3 +6,4 @@ export { CockpitStaffCard } from './CockpitStaffCard';
 export { CockpitTableCard } from './CockpitTableCard';
 export type { TransactionRow } from './CockpitTableCard';
 export { CockpitQuickLaunch } from './CockpitQuickLaunch';
+export { AutomationScheduleModal } from './AutomationScheduleModal';

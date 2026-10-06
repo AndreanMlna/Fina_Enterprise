@@ -5,7 +5,7 @@ import type {
   SAKEMKMReportResponse, 
   KPIDashboardResponse 
 } from '../types';
-import type { RunwayBaseline } from '../../types';
+import type { RunwayBaseline, AutomationScheduleItem } from '../../types';
 
 export class LedgerService {
   /**
@@ -41,6 +41,27 @@ export class LedgerService {
    */
   async getRunwayBaseline(): Promise<RunwayBaseline | null> {
     return httpClient.get<RunwayBaseline | null>('/api/v1/kpi/runway-baseline', null);
+  }
+
+  /**
+   * Mengambil konfigurasi jadwal otomasi operasional tenant dari database
+   */
+  async getAutomations(): Promise<AutomationScheduleItem[]> {
+    return httpClient.get<AutomationScheduleItem[]>('/api/v1/kpi/automations', []);
+  }
+
+  /**
+   * Menyimpan perubahan jadwal otomasi ke database PostgreSQL
+   */
+  async updateAutomation(taskKey: string, payload: { time_range?: string; is_active?: boolean; cron_expression?: string }): Promise<any> {
+    return httpClient.patch(`/api/v1/kpi/automations/${taskKey}`, payload);
+  }
+
+  /**
+   * Menjalankan otomatisasi secara seketika (On-Demand Run Now)
+   */
+  async runAutomation(taskKey: string): Promise<any> {
+    return httpClient.post(`/api/v1/kpi/automations/${taskKey}/run`, {});
   }
 }
 

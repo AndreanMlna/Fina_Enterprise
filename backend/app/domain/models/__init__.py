@@ -8,6 +8,7 @@ from app.domain.models.product import Product, POSReceiptRecord, ProductRecipeIt
 from app.domain.models.loan import LoanEvaluation
 from app.domain.models.benchmark import CommodityBenchmark, SupplierQuote
 from app.domain.models.forensics import ReceiptForensicsRecord
+from app.domain.models.automation import TenantAutomationSchedule
 
 __all__ = [
     "Tenant",
@@ -33,4 +34,5 @@ __all__ = [
     "CommodityBenchmark",
     "SupplierQuote",
     "ReceiptForensicsRecord",
+    "TenantAutomationSchedule",
 ]
