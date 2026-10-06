@@ -23,6 +23,9 @@ import { POSRecipeAIInsights } from './recipe/POSRecipeAIInsights';
 interface POSRecipePricingModalProps {
   isOpen: boolean;
   product: POSProduct | null;
+  availableMaterials?: POSProduct[];
+  openedFromProduction?: boolean;
+  onReturnToProduction?: () => void;
   onClose: () => void;
   onPriceUpdated: (updatedProduct: POSProduct) => void;
 }
@@ -137,6 +140,9 @@ function generateLocalPricingAnalysis(
 export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
   isOpen,
   product,
+  availableMaterials = [],
+  openedFromProduction = false,
+  onReturnToProduction,
   onClose,
   onPriceUpdated
 }) => {
@@ -158,18 +164,11 @@ export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
     setIsLoadingRecipe(true);
     setFeedback(null);
 
-    // 1. Fondasi default: gunakan data produk yang ada sebagai 1 baris bahan dasar
-    const initialItem: RecipeItem = {
-      material_name: product.name,
-      quantity_required: 1,
-      unit: product.unit || 'Pcs',
-      cost_per_unit: product.cogs || 0
-    };
-    let resolvedItems: RecipeItem[] = [initialItem];
+    let resolvedItems: RecipeItem[] = [];
     let resolvedOverhead = 0;
     let resolvedWastage = 0;
 
-    // 2. Coba ambil resep spesifik dari backend
+    // 1. Coba ambil resep spesifik dari backend
     try {
       const recipeRes = await api.getProductRecipe(product.id);
       if (recipeRes && Array.isArray(recipeRes.items) && recipeRes.items.length > 0) {
@@ -180,6 +179,16 @@ export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
     } catch (err: any) {
       // 404 atau belum ada resep adalah kondisi wajar bagi produk baru; jangan tampilkan banner error merah!
       console.info('[POSRecipePricingModal] Produk belum memiliki formulasi BOM di database, menggunakan template awal.');
+    }
+
+    // 2. Jika belum ada resep tersimpan, sediakan 1 baris bahan awal bersih
+    if (resolvedItems.length === 0) {
+      resolvedItems = [{
+        material_name: '',
+        quantity_required: 1,
+        unit: availableMaterials[0]?.unit || 'Gram',
+        cost_per_unit: 0
+      }];
     }
 
     setItems(resolvedItems);
@@ -271,12 +280,21 @@ export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
       }
       setFeedback({ type: 'success', message: 'Resep bahan baku berhasil disimpan & HPP diperbarui!' });
 
-      // Update produk parent
-      onPriceUpdated({
+      const updatedProduct = {
         ...product,
         cogs: res.new_cogs
-      });
-      setActiveTab('analysis');
+      };
+
+      // Update produk parent
+      onPriceUpdated(updatedProduct);
+
+      if (openedFromProduction && onReturnToProduction) {
+        setTimeout(() => {
+          onReturnToProduction();
+        }, 300);
+      } else {
+        setActiveTab('analysis');
+      }
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -484,6 +502,7 @@ export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
             <>
               <POSRecipeTable
                 items={items}
+                availableMaterials={availableMaterials}
                 onAddItem={handleAddMaterial}
                 onUpdateItem={handleUpdateItem}
                 onRemoveItem={handleRemoveMaterial}
@@ -498,6 +517,7 @@ export const POSRecipePricingModal: React.FC<POSRecipePricingModalProps> = ({
                 estimatedHpp={estimatedHpp}
                 isSavingRecipe={isSavingRecipe}
                 onSaveRecipe={handleSaveRecipe}
+                openedFromProduction={openedFromProduction}
               />
             </>
           ) : (

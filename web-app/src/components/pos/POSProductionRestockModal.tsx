@@ -29,6 +29,9 @@ export const isRawMaterialOrEquipment = (category?: string, name?: string): bool
 interface POSProductionRestockModalProps {
   isOpen: boolean;
   products: POSProduct[];
+  initialTab?: 'restock' | 'production';
+  initialProductId?: string;
+  initialBatchQuantity?: number;
   onClose: () => void;
   onRestockSuccess: (res: RestockInventoryResponse) => void;
   onProductionSuccess: (res: ProductionBatchResponse) => void;
@@ -38,12 +41,15 @@ interface POSProductionRestockModalProps {
 export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps> = ({
   isOpen,
   products,
+  initialTab = 'restock',
+  initialProductId,
+  initialBatchQuantity,
   onClose,
   onRestockSuccess,
   onProductionSuccess,
   onOpenRecipePricing
 }) => {
-  const [activeTab, setActiveTab] = useState<'restock' | 'production'>('restock');
+  const [activeTab, setActiveTab] = useState<'restock' | 'production'>(initialTab);
 
   // --- Form State: Restock Bahan Baku & Alat ---
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
@@ -110,13 +116,22 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
   // Reset form bila modal dibuka
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
+      if (initialProductId) {
+        setSelectedFinishedProductId(initialProductId);
+      }
+      if (initialBatchQuantity !== undefined) {
+        setBatchQuantity(initialBatchQuantity);
+      }
       setRestockResult(null);
       setRestockError(null);
       setProductionResult(null);
       setProductionError(null);
       loadMaterials();
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab, initialProductId, initialBatchQuantity]);
 
   // Set default material saat displayMaterials tersedia
   useEffect(() => {
@@ -213,16 +228,47 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
     };
   }, [currentMaterialProduct, quantityAdded, purchasePricePerUnit]);
 
+  // Produk jadi terpilih saat ini
+  const finishedProductSelected = useMemo(() => {
+    return finishedGoods.find(p => p.id === selectedFinishedProductId) || products.find(p => p.id === selectedFinishedProductId);
+  }, [finishedGoods, products, selectedFinishedProductId]);
+
   // Analisis Kecukupan Bahan Baku untuk Produksi Batch
   const productionMaterialFeasibility = useMemo(() => {
+    const numBatchQty = Number(batchQuantity) || 0;
+    const numOverhead = Number(batchOverheadCost) || 0;
+    const baseCogs = finishedProductSelected && finishedProductSelected.cogs ? Number(finishedProductSelected.cogs) : 0;
+
     if (!recipeData || !Array.isArray(recipeData.items) || recipeData.items.length === 0) {
-      return { hasRecipe: false, items: [], allSufficient: false, totalMaterialCost: 0, estimatedBatchHppPerUnit: 0 };
+      if (baseCogs > 0) {
+        const totalBatchCost = (baseCogs * numBatchQty) + numOverhead;
+        const estimatedBatchHppPerUnit = numBatchQty > 0 ? Math.round(totalBatchCost / numBatchQty) : baseCogs;
+        return {
+          hasRecipe: false,
+          hasFallbackCogs: true,
+          baseCogs,
+          items: [],
+          allSufficient: true,
+          totalMaterialCost: Math.round(totalBatchCost),
+          estimatedBatchHppPerUnit,
+          canExecute: numBatchQty > 0
+        };
+      }
+      return {
+        hasRecipe: false,
+        hasFallbackCogs: false,
+        baseCogs: 0,
+        items: [],
+        allSufficient: false,
+        totalMaterialCost: 0,
+        estimatedBatchHppPerUnit: 0,
+        canExecute: false
+      };
     }
 
     let allSufficient = true;
     let totalMaterialCost = 0;
 
-    const numBatchQty = Number(batchQuantity) || 0;
     const items = recipeData.items.map(item => {
       const requiredTotal = Number((item.quantity_required * numBatchQty).toFixed(4));
       // Cari produk bahan baku di katalog untuk cek stok fisik saat ini
@@ -245,17 +291,20 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
 
     const wastageMultiplier = 1 / (1 - ((recipeData.wastage_percent || 0) / 100));
     const adjustedMaterialCost = totalMaterialCost * wastageMultiplier;
-    const totalBatchCost = adjustedMaterialCost + (Number(batchOverheadCost) || 0);
+    const totalBatchCost = adjustedMaterialCost + numOverhead;
     const estimatedBatchHppPerUnit = numBatchQty > 0 ? Math.round(totalBatchCost / numBatchQty) : 0;
 
     return {
       hasRecipe: true,
+      hasFallbackCogs: false,
+      baseCogs,
       items,
       allSufficient,
       totalMaterialCost: Math.round(totalBatchCost),
-      estimatedBatchHppPerUnit
+      estimatedBatchHppPerUnit,
+      canExecute: allSufficient && numBatchQty > 0
     };
-  }, [recipeData, batchQuantity, batchOverheadCost, allMaterialCatalog]);
+  }, [recipeData, batchQuantity, batchOverheadCost, allMaterialCatalog, finishedProductSelected]);
 
   // Handler Submit Restock Bahan Baku
   const handleRestockSubmit = async (e: React.FormEvent) => {
@@ -337,8 +386,6 @@ export const POSProductionRestockModal: React.FC<POSProductionRestockModalProps>
   };
 
   if (!isOpen) return null;
-
-  const finishedProductSelected = finishedGoods.find(p => p.id === selectedFinishedProductId) || products.find(p => p.id === selectedFinishedProductId);
 
   return (
     <div

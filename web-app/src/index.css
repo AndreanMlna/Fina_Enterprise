@@ -250,6 +250,26 @@ h1, h2, h3, h4, h5, h6 {
   filter: brightness(1.1);
 }
 
+.btn-outline {
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.45);
+  color: #38bdf8;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.15);
+}
+
+.btn-outline:hover {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: #38bdf8;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.3);
+}
+
+.btn-outline:active {
+  transform: translateY(0);
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 0.775rem;

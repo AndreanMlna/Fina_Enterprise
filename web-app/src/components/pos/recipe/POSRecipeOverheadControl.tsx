@@ -18,6 +18,7 @@ interface POSRecipeOverheadControlProps {
   estimatedHpp: number;
   isSavingRecipe: boolean;
   onSaveRecipe: () => void;
+  openedFromProduction?: boolean;
 }
 
 export const POSRecipeOverheadControl: React.FC<POSRecipeOverheadControlProps> = ({
@@ -29,7 +30,8 @@ export const POSRecipeOverheadControl: React.FC<POSRecipeOverheadControlProps> =
   setTargetMargin,
   estimatedHpp,
   isSavingRecipe,
-  onSaveRecipe
+  onSaveRecipe,
+  openedFromProduction = false
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -220,7 +222,7 @@ export const POSRecipeOverheadControl: React.FC<POSRecipeOverheadControlProps> =
           }}
         >
           {isSavingRecipe ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-          <span>Simpan & Analisis Harga AI</span>
+          <span>{openedFromProduction ? '✨ Simpan Resep & Kembali ke Produksi' : 'Simpan & Analisis Harga AI'}</span>
         </button>
       </div>
     </div>

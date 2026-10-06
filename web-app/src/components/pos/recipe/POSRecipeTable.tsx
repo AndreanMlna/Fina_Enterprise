@@ -6,11 +6,13 @@
 
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import type { POSProduct } from '../../../types';
 import type { RecipeItem } from '../../../services/types';
 import { formatCurrency } from '../../../utils';
 
 interface POSRecipeTableProps {
   items: RecipeItem[];
+  availableMaterials?: POSProduct[];
   onAddItem: () => void;
   onUpdateItem: (index: number, field: keyof RecipeItem, value: any) => void;
   onRemoveItem: (index: number) => void;
@@ -18,10 +20,28 @@ interface POSRecipeTableProps {
 
 export const POSRecipeTable: React.FC<POSRecipeTableProps> = ({
   items,
+  availableMaterials = [],
   onAddItem,
   onUpdateItem,
   onRemoveItem
 }) => {
+  const handleMaterialNameChange = (idx: number, newName: string) => {
+    onUpdateItem(idx, 'material_name', newName);
+    if (availableMaterials && availableMaterials.length > 0) {
+      const matched = availableMaterials.find(m => m.name.toLowerCase() === newName.trim().toLowerCase());
+      if (matched) {
+        if (matched.cogs && matched.cogs > 0) {
+          onUpdateItem(idx, 'cost_per_unit', matched.cogs);
+        }
+        if (matched.unit) {
+          onUpdateItem(idx, 'unit', matched.unit);
+        }
+        if (matched.id) {
+          onUpdateItem(idx, 'material_id', matched.id);
+        }
+      }
+    }
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -81,9 +101,10 @@ export const POSRecipeTable: React.FC<POSRecipeTableProps> = ({
                   <td style={{ padding: '6px 12px' }}>
                     <input
                       type="text"
+                      list="recipe-available-materials"
                       value={item.material_name}
-                      onChange={(e) => onUpdateItem(idx, 'material_name', e.target.value)}
-                      placeholder="Misal: Biji Kopi, Tepung, Box Kemasan"
+                      onChange={(e) => handleMaterialNameChange(idx, e.target.value)}
+                      placeholder="Pilih / ketik nama bahan baku..."
                       style={{
                         width: '100%',
                         background: 'rgba(255, 255, 255, 0.03)',
@@ -214,6 +235,19 @@ export const POSRecipeTable: React.FC<POSRecipeTableProps> = ({
           </tbody>
         </table>
       </div>
+
+      {availableMaterials && availableMaterials.length > 0 && (
+        <datalist id="recipe-available-materials">
+          {availableMaterials.map((mat) => (
+            <option
+              key={mat.id}
+              value={mat.name}
+            >
+              {mat.name} ({mat.unit || 'Kg'} - {formatCurrency(mat.cogs || 0)})
+            </option>
+          ))}
+        </datalist>
+      )}
     </div>
   );
 };

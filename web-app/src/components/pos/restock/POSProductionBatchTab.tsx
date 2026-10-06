@@ -26,6 +26,8 @@ interface POSProductionBatchTabProps {
   isLoadingRecipe: boolean;
   productionMaterialFeasibility: {
     hasRecipe: boolean;
+    hasFallbackCogs?: boolean;
+    baseCogs?: number;
     items: Array<{
       material_name: string;
       quantity_required: number;
@@ -38,6 +40,7 @@ interface POSProductionBatchTabProps {
     allSufficient: boolean;
     totalMaterialCost: number;
     estimatedBatchHppPerUnit: number;
+    canExecute?: boolean;
   };
   isSubmittingProduction: boolean;
   productionResult: ProductionBatchResponse | null;
@@ -254,10 +257,23 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenRecipePricing(finishedProductSelected)}
-                className="btn btn-sm btn-outline"
-                style={{ fontSize: '0.72rem', padding: '4px 8px', color: 'var(--cyan-400)' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  padding: '6px 12px',
+                  background: 'rgba(6, 182, 212, 0.15)',
+                  border: '1px solid rgba(6, 182, 212, 0.5)',
+                  color: '#38bdf8',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)'
+                }}
               >
-                Edit Resep BOM
+                <Sparkles size={13} color="#38bdf8" />
+                <span>Atur / Edit Resep BOM</span>
               </button>
             )}
           </div>
@@ -268,10 +284,139 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
               Memuat komposisi resep produk...
             </div>
           ) : !productionMaterialFeasibility.hasRecipe ? (
-            <div style={{ textAlign: 'center', padding: '16px', color: '#f59e0b', fontSize: '0.82rem' }}>
-              <AlertTriangle size={18} style={{ margin: '0 auto 6px auto' }} />
-              Produk ini belum memiliki resep bahan baku (BOM) tersimpan. Klik tombol "Edit Resep BOM" di atas untuk menyusun takaran bahan.
-            </div>
+            productionMaterialFeasibility.hasFallbackCogs ? (
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(30, 41, 59, 0.7) 100%)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+                    <Factory size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f8fafc' }}>
+                      Mode Produksi: Menggunakan Modal Dasar Produk
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: '#cbd5e1', lineHeight: '1.45' }}>
+                      Produk ini belum memiliki rincian resep bahan baku (BOM) tersimpan, namun memiliki modal dasar tercatat sebesar{' '}
+                      <strong style={{ color: 'var(--mint-neon)' }}>
+                        {formatCurrency(productionMaterialFeasibility.baseCogs || 0)}/pcs
+                      </strong>
+                      . Anda dapat langsung mengeksekusi produksi batch ini, atau mengatur rincian BOM agar stok fisik bahan baku mentah otomatis berkurang.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                  }}
+                >
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                    Estimasi Biaya Batch ({batchQuantity || 0} Pcs):{' '}
+                    <strong style={{ color: '#ffffff' }}>
+                      {formatCurrency(productionMaterialFeasibility.totalMaterialCost)}
+                    </strong>
+                    {batchOverheadCost && Number(batchOverheadCost) > 0 ? (
+                      <span style={{ color: '#fca5a5', marginLeft: '6px' }}>
+                        (termasuk overhead {formatCurrency(Number(batchOverheadCost))})
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Estimasi HPP / Pcs:</span>
+                    <span className="mono" style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--mint-neon)' }}>
+                      {formatCurrency(productionMaterialFeasibility.estimatedBatchHppPerUnit)}
+                    </span>
+                  </div>
+                </div>
+
+                {finishedProductSelected && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenRecipePricing(finishedProductSelected)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        background: 'rgba(6, 182, 212, 0.2)',
+                        border: '1px solid rgba(6, 182, 212, 0.6)',
+                        color: '#38bdf8',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Sparkles size={14} />
+                      <span>✨ Susun Rincian Bahan Baku (BOM)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '20px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <AlertTriangle size={24} color="#f59e0b" />
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fef3c7' }}>
+                  Belum Ada Resep Bahan Baku & Modal Dasar
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#cbd5e1', maxWidth: '480px' }}>
+                  Produk ini belum memiliki takaran bahan baku (BOM) dan modal dasar (HPP). Silakan susun resep bahan baku terlebih dahulu agar perhitungan HPP dan pengurangan stok bahan baku akurat.
+                </div>
+                {finishedProductSelected && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenRecipePricing(finishedProductSelected)}
+                    style={{
+                      marginTop: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      background: 'rgba(245, 158, 11, 0.2)',
+                      border: '1px solid rgba(245, 158, 11, 0.6)',
+                      color: '#fef08a',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    <span>Susun Resep Bahan Baku Sekarang</span>
+                  </button>
+                )}
+              </div>
+            )
           ) : (
             <>
               <div style={{ overflowX: 'auto' }}>
@@ -338,13 +483,13 @@ export const POSProductionBatchTab: React.FC<POSProductionBatchTabProps> = ({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
           <button
             type="submit"
-            disabled={isSubmittingProduction || !productionMaterialFeasibility.hasRecipe || !productionMaterialFeasibility.allSufficient}
+            disabled={isSubmittingProduction || !productionMaterialFeasibility.canExecute}
             className="btn btn-primary"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              opacity: (!productionMaterialFeasibility.hasRecipe || !productionMaterialFeasibility.allSufficient) ? 0.5 : 1
+              opacity: (isSubmittingProduction || !productionMaterialFeasibility.canExecute) ? 0.5 : 1
             }}
           >
             {isSubmittingProduction ? (

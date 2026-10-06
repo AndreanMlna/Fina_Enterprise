@@ -65,6 +65,8 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
   const [recipeProduct, setRecipeProduct] = useState<POSProduct | null>(null);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState<boolean>(false);
   const [isProductionRestockModalOpen, setIsProductionRestockModalOpen] = useState<boolean>(false);
+  const [isRecipeFromProduction, setIsRecipeFromProduction] = useState<boolean>(false);
+  const [productionTargetProductId, setProductionTargetProductId] = useState<string | undefined>(undefined);
 
   // --- Konfirmasi Penghapusan Produk Enterprise (Zero Browser Alerts) ---
   const [productToDelete, setProductToDelete] = useState<POSProduct | null>(null);
@@ -101,8 +103,12 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
     }
   };
 
-  const handleOpenRecipePricing = (product: POSProduct) => {
+  const handleOpenRecipePricing = (product: POSProduct, fromProduction = false) => {
     setRecipeProduct(product);
+    setIsRecipeFromProduction(fromProduction);
+    if (fromProduction) {
+      setProductionTargetProductId(product.id);
+    }
     setIsRecipeModalOpen(true);
   };
 
@@ -132,6 +138,10 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
 
   const saleableProducts = useMemo(() => {
     return products.filter(p => !isRawMaterialOrEquipment(p.category, p.name));
+  }, [products]);
+
+  const availableMaterials = useMemo(() => {
+    return products.filter(p => isRawMaterialOrEquipment(p.category, p.name));
   }, [products]);
 
   const totalInventoryValue = useMemo(() => {
@@ -802,7 +812,7 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
                     onAddToCart={handleAddToCart}
                     onEdit={handleOpenEditProduct}
                     onDelete={handleRequestDelete}
-                    onOpenPricing={handleOpenRecipePricing}
+                    onOpenPricing={(prod) => handleOpenRecipePricing(prod, false)}
                   />
                 ))}
               </div>
@@ -895,9 +905,20 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
       <POSRecipePricingModal
         isOpen={isRecipeModalOpen}
         product={recipeProduct}
+        availableMaterials={availableMaterials}
+        openedFromProduction={isRecipeFromProduction}
+        onReturnToProduction={() => {
+          setIsRecipeModalOpen(false);
+          setRecipeProduct(null);
+          setIsProductionRestockModalOpen(true);
+        }}
         onClose={() => {
           setIsRecipeModalOpen(false);
           setRecipeProduct(null);
+          if (isRecipeFromProduction) {
+            setIsProductionRestockModalOpen(true);
+          }
+          setIsRecipeFromProduction(false);
         }}
         onPriceUpdated={(updatedProduct) => {
           reloadCatalog();
@@ -912,7 +933,12 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
       <POSProductionRestockModal
         isOpen={isProductionRestockModalOpen}
         products={products}
-        onClose={() => setIsProductionRestockModalOpen(false)}
+        initialTab="production"
+        initialProductId={productionTargetProductId}
+        onClose={() => {
+          setIsProductionRestockModalOpen(false);
+          setIsRecipeFromProduction(false);
+        }}
         onRestockSuccess={(res) => {
           reloadCatalog();
           setNotificationToast({
@@ -929,7 +955,7 @@ export const POSView: React.FC<POSViewProps> = ({ tenant, onNavigateToLedger, on
         }}
         onOpenRecipePricing={(prod) => {
           setIsProductionRestockModalOpen(false);
-          handleOpenRecipePricing(prod);
+          handleOpenRecipePricing(prod, true);
         }}
       />
 

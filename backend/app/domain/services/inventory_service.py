@@ -334,6 +334,9 @@ class InventoryService:
         product.stock = product.stock + qty_produced
 
         # Hitung HPP riil batch
+        if not recipe_items and float(product.cogs or 0.0) > 0:
+            total_batch_material_cost = float(product.cogs) * qty_produced
+
         wastage_pct = float(product.wastage_percent or 0.0)
         multiplier = 1.0 / (1.0 - (wastage_pct / 100.0)) if wastage_pct < 99 else 1.0
         adjusted_material_cost = (total_batch_material_cost / qty_produced) * multiplier
