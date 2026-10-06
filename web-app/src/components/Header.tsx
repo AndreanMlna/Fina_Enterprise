@@ -314,24 +314,24 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onTogglePii}
           style={{
-            fontSize: '0.72rem',
-            padding: '5px 9px',
+            fontSize: '0.73rem',
+            padding: '5px 10px',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '5px',
             whiteSpace: 'nowrap',
             flexShrink: 0,
-            background: isPiiMasked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-            border: isPiiMasked ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+            background: isPiiMasked ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255, 255, 255, 0.06)',
+            border: isPiiMasked ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(255, 255, 255, 0.16)',
             borderRadius: 'var(--radius-md)',
-            color: isPiiMasked ? '#34d399' : '#94a3b8',
+            color: isPiiMasked ? '#34d399' : '#cbd5e1',
             cursor: 'pointer',
             fontWeight: 600,
             transition: 'all 0.18s ease'
           }}
-          title={isPiiMasked ? "PII tersensor aktif. Klik untuk membuka." : "Klik untuk menyamarkan data sensitif."}
+          title={isPiiMasked ? "Zero-Knowledge PII Masking Aktif (UU PDP No. 27/2022). Klik untuk membuka sensor data." : "Zero-Knowledge PII Masking Nonaktif. Klik untuk menyamarkan data pribadi sensitif (UU PDP)."}
         >
-          {isPiiMasked ? <EyeOff size={13} /> : <Eye size={13} />}
+          {isPiiMasked ? <EyeOff size={14} strokeWidth={2.2} /> : <Eye size={14} strokeWidth={2.2} />}
           <span>PII {isPiiMasked ? 'ON' : 'OFF'}</span>
         </button>
 
@@ -339,25 +339,26 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenTrace}
           style={{
-            fontSize: '0.72rem',
-            padding: '5px 9px',
+            fontSize: '0.73rem',
+            padding: '5px 10px',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '5px',
             whiteSpace: 'nowrap',
             flexShrink: 0,
-            background: 'rgba(16, 185, 129, 0.08)',
-            border: '1px solid rgba(16, 185, 129, 0.25)',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
             borderRadius: 'var(--radius-md)',
-            color: '#94a3b8',
+            color: '#e2e8f0',
             cursor: 'pointer',
+            fontWeight: 600,
             transition: 'all 0.18s ease'
           }}
-          title="Buka panel Agent Trace"
+          title="FinOrchestrator Cognitive Trace (Audit Bus & Real-time Event Streaming SRE)"
         >
-          <Terminal size={13} color="var(--emerald-400)" />
+          <Terminal size={14} color="#34d399" strokeWidth={2.2} />
           <span>Trace</span>
-          <span className="badge badge-emerald" style={{ fontSize: '0.58rem', padding: '0 4px' }}>
+          <span className="badge badge-emerald" style={{ fontSize: '0.60rem', padding: '1px 5px', fontWeight: 700 }}>
             {traceCount}
           </span>
         </button>
@@ -532,25 +533,11 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Bantuan Support Button */}
         {onOpenSupportModal && (
           <button
+            className="btn-support-header"
             onClick={onOpenSupportModal}
-            title="Pusat bantuan & lapor kendala"
-            style={{
-              fontSize: '0.73rem',
-              padding: '5px 10px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              background: 'rgba(6, 182, 212, 0.08)',
-              border: '1px solid rgba(6, 182, 212, 0.25)',
-              borderRadius: 'var(--radius-md)',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              transition: 'all 0.18s ease'
-            }}
+            title="Pusat Bantuan & Lapor Kendala Operasional UMKM"
           >
-            <LifeBuoy size={13} color="var(--cyan-400)" />
+            <LifeBuoy size={14} color="#38bdf8" strokeWidth={2.4} />
             <span>Bantuan</span>
           </button>
         )}
