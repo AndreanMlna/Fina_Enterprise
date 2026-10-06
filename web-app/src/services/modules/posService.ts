@@ -73,10 +73,18 @@ export class POSService {
   }
 
   /**
-   * Mengambil komposisi bahan baku (BOM) resep produk
+   * Mengambil komposisi bahan baku (BOM) resep produk.
+   * Toleran terhadap HTTP 404 (produk belum memiliki resep terdaftar di database).
    */
-  async getProductRecipe(productId: string): Promise<ProductRecipeResponse> {
-    return httpClient.get<ProductRecipeResponse>(`/api/v1/pos/products/${productId}/recipe`);
+  async getProductRecipe(productId: string): Promise<ProductRecipeResponse | null> {
+    try {
+      return await httpClient.get<ProductRecipeResponse>(`/api/v1/pos/products/${productId}/recipe`);
+    } catch (err: any) {
+      if (err?.status === 404 || err?.response?.status === 404) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   /**
@@ -89,8 +97,15 @@ export class POSService {
   /**
    * Mengambil analisis HPP & rekomendasi harga AI anti-rugi
    */
-  async getPricingAnalysis(productId: string, targetMargin: number = 35): Promise<DynamicPricingAnalysis> {
-    return httpClient.get<DynamicPricingAnalysis>(`/api/v1/pos/products/${productId}/pricing-analysis?target_margin=${targetMargin}`);
+  async getPricingAnalysis(productId: string, targetMargin: number = 35): Promise<DynamicPricingAnalysis | null> {
+    try {
+      return await httpClient.get<DynamicPricingAnalysis>(`/api/v1/pos/products/${productId}/pricing-analysis?target_margin=${targetMargin}`);
+    } catch (err: any) {
+      if (err?.status === 404 || err?.response?.status === 404) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   /**

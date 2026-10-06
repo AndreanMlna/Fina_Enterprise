@@ -98,11 +98,23 @@ export const POSRecipeTable: React.FC<POSRecipeTableProps> = ({
                   </td>
                   <td style={{ padding: '6px 12px' }}>
                     <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={item.quantity_required || ''}
-                      onChange={(e) => onUpdateItem(idx, 'quantity_required', parseFloat(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={item.quantity_required ? String(item.quantity_required) : ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+                        if (val === '') {
+                          onUpdateItem(idx, 'quantity_required', 0);
+                          return;
+                        }
+                        const parts = val.split('.');
+                        const cleaned = parts.length > 2 
+                          ? `${parts[0]}.${parts.slice(1).join('')}` 
+                          : val;
+                        const sanitized = cleaned.replace(/^0+(?=\d)/, '');
+                        onUpdateItem(idx, 'quantity_required', parseFloat(sanitized) || 0);
+                      }}
+                      placeholder="1"
                       style={{
                         width: '100%',
                         textAlign: 'right',
@@ -137,17 +149,26 @@ export const POSRecipeTable: React.FC<POSRecipeTableProps> = ({
                       <option value="Ml">Ml</option>
                       <option value="Liter">Liter</option>
                       <option value="Pcs">Pcs</option>
+                      <option value="Pack">Pack</option>
                       <option value="Lembar">Lembar</option>
                       <option value="Porsi">Porsi</option>
                     </select>
                   </td>
                   <td style={{ padding: '6px 12px' }}>
                     <input
-                      type="number"
-                      min="0"
-                      value={item.cost_per_unit || ''}
-                      onChange={(e) => onUpdateItem(idx, 'cost_per_unit', parseFloat(e.target.value) || 0)}
-                      placeholder="Rp 0"
+                      type="text"
+                      inputMode="numeric"
+                      value={item.cost_per_unit ? String(item.cost_per_unit) : ''}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9]/g, '');
+                        if (raw === '') {
+                          onUpdateItem(idx, 'cost_per_unit', 0);
+                          return;
+                        }
+                        const cleaned = raw.replace(/^0+(?=\d)/, '');
+                        onUpdateItem(idx, 'cost_per_unit', cleaned === '' ? 0 : parseInt(cleaned, 10));
+                      }}
+                      placeholder="0"
                       style={{
                         width: '100%',
                         textAlign: 'right',

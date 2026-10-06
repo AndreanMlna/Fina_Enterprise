@@ -60,10 +60,18 @@ export const POSRecipeOverheadControl: React.FC<POSRecipeOverheadControlProps> =
               fontWeight: 600
             }}>Rp</span>
             <input
-              type="number"
-              min="0"
-              value={overheadCost || ''}
-              onChange={(e) => setOverheadCost(parseFloat(e.target.value) || 0)}
+              type="text"
+              inputMode="numeric"
+              value={overheadCost === 0 ? '0' : (overheadCost || '')}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                if (raw === '') {
+                  setOverheadCost(0);
+                  return;
+                }
+                const cleaned = raw.replace(/^0+(?=\d)/, '');
+                setOverheadCost(cleaned === '' ? 0 : parseInt(cleaned, 10));
+              }}
               placeholder="0"
               style={{
                 width: '100%',
@@ -92,11 +100,19 @@ export const POSRecipeOverheadControl: React.FC<POSRecipeOverheadControlProps> =
           </span>
           <div style={{ position: 'relative', marginTop: '6px' }}>
             <input
-              type="number"
-              min="0"
-              max="90"
-              value={wastagePercent || ''}
-              onChange={(e) => setWastagePercent(Math.min(90, Math.max(0, parseFloat(e.target.value) || 0)))}
+              type="text"
+              inputMode="numeric"
+              value={wastagePercent === 0 ? '0' : (wastagePercent || '')}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                if (raw === '') {
+                  setWastagePercent(0);
+                  return;
+                }
+                const cleaned = raw.replace(/^0+(?=\d)/, '');
+                const num = cleaned === '' ? 0 : Math.min(90, parseInt(cleaned, 10));
+                setWastagePercent(num);
+              }}
               placeholder="0"
               style={{
                 width: '100%',
