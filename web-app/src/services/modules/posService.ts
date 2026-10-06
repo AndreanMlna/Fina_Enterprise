@@ -4,7 +4,9 @@ import type {
   CreatePOSProductPayload, 
   UpdatePOSProductPayload, 
   POSCheckoutPayload, 
-  POSReceipt 
+  POSReceipt,
+  StockMovement,
+  InventorySummary
 } from '../../types';
 import type {
   ProductRecipeResponse,
@@ -134,6 +136,32 @@ export class POSService {
    */
   async getMarginLeakageAlerts(): Promise<MarginLeakageScanResponse> {
     return httpClient.get<MarginLeakageScanResponse>('/api/v1/pos/pricing/margin-leakage-alerts');
+  }
+
+  /**
+   * Mengambil rekapitulasi lengkap nilai gudang & persediaan (Bahan, Produk, Alat)
+   */
+  async getInventorySummary(): Promise<InventorySummary> {
+    return httpClient.get<InventorySummary>('/api/v1/pos/inventory/summary');
+  }
+
+  /**
+   * Mengambil buku riwayat mutasi stok fisik (Stock Movement Ledger)
+   */
+  async getStockMovements(productId?: string, movementType?: string, limit: number = 100): Promise<StockMovement[]> {
+    const params = new URLSearchParams();
+    if (productId) params.append('product_id', productId);
+    if (movementType) params.append('movement_type', movementType);
+    if (limit) params.append('limit', String(limit));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return httpClient.get<StockMovement[]>(`/api/v1/pos/inventory/movements${query}`, []);
+  }
+
+  /**
+   * Melakukan stock opname / penyesuaian stok fisik riil
+   */
+  async adjustStock(payload: { product_id: string; actual_physical_stock: number; reason: string; notes?: string }): Promise<any> {
+    return httpClient.post<any>('/api/v1/pos/inventory/adjust', payload);
   }
 }
 

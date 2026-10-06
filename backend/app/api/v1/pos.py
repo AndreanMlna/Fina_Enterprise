@@ -48,6 +48,7 @@ from app.schemas.pos import (
     RestockInventoryPayload,
     ProductionBatchPayload,
     ApplyPricePayload,
+    StockAdjustmentPayload,
 )
 
 __all__ = [
@@ -693,6 +694,70 @@ async def scan_margin_leakage_alerts(
         tenant_id=current_user.tenant_id,
         tax_rate=PP55_FINAL_TAX_RATE
     )
+
+
+@router.get("/inventory/summary", summary="Rekapitulasi lengkap nilai gudang & persediaan (Bahan, Produk, Alat)")
+async def get_inventory_summary(
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mengambil ringkasan nilai persediaan gudang terklasifikasi:
+    - Nilai Total Bahan Baku & Kemasan (Akun 1104)
+    - Nilai Total Produk Jadi Siap Jual (Akun 1105)
+    - Nilai Total Alat & Peralatan Usaha (Akun 1201)
+    - Peringatan stok kritis / menipis
+    """
+    return await inventory_service.get_inventory_summary(
+        db=db,
+        tenant_id=current_user.tenant_id
+    )
+
+
+@router.get("/inventory/movements", summary="Ambil buku riwayat mutasi stok fisik (Stock Movement Ledger)")
+async def get_stock_movements(
+    product_id: Optional[str] = Query(default=None, description="Filter berdasarkan ID barang tertentu"),
+    movement_type: Optional[str] = Query(default=None, description="Filter tipe mutasi (RESTOCK_IN, PRODUCTION_IN, PRODUCTION_OUT, dll.)"),
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Audit trail mutasi fisik persediaan barang SAK EMKM:
+    Mencatat setiap kronologi barang masuk (restock/produksi) dan keluar (konsumsi resep/penjualan/opname).
+    """
+    return await inventory_service.get_stock_movements(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        product_id=product_id,
+        movement_type=movement_type,
+        limit=limit
+    )
+
+
+@router.post("/inventory/adjust", summary="Stock Opname / Penyesuaian stok fisik riil")
+async def adjust_stock_inventory(
+    payload: StockAdjustmentPayload,
+    current_user: UserCredential = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Siklus Stock Opname:
+    Menyelaraskan stok fisik aktual di gudang dengan catatan sistem.
+    Jika ada selisih hilang/rusak/basi, otomatis mencatat mutasi dan membukukan jurnal kerugian persediaan SAK EMKM.
+    """
+    try:
+        return await inventory_service.adjust_stock(
+            db=db,
+            tenant_id=current_user.tenant_id,
+            payload=payload
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
 
 
 

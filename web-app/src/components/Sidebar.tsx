@@ -17,7 +17,8 @@ import {
   Rocket,
   ShieldCheck,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Boxes
 } from 'lucide-react';
 import type { NavigationTab, Tenant, UserRole } from '../types';
 
@@ -93,6 +94,12 @@ const PRIMARY_TILES: readonly NavTile[] = [
 
 // Kategori Modul Favorit & Lanjutan
 const FAVORITE_ITEMS: readonly NavSubItem[] = [
+  {
+    id: 'inventory',
+    label: 'Gudang & Stok',
+    icon: Boxes,
+    allowedRoles: new Set(['OWNER', 'MANAGER'])
+  },
   {
     id: 'b2b_benchmark',
     label: 'B2B Grosir',

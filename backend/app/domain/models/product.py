@@ -111,3 +111,32 @@ class POSReceiptRecord(Base):
     audit_merkle_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     items_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class StockMovementRecord(Base):
+    """
+    Buku Mutasi Stok Fisik & Audit Trail Persediaan (Stock Movement Ledger).
+    Merekam setiap pergerakan barang (IN/OUT), kuantitas, nilai modal MWA,
+    dan nomor referensi transaksi (Faktur Restock, Batch Produksi, Nota Kasir, Opname).
+    Standar: SAK EMKM & PP 55/2022 (Audit Trail Persediaan).
+    """
+    __tablename__ = "stock_movements"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), ForeignKey("tenants.id"), index=True, nullable=False)
+    product_id: Mapped[str] = mapped_column(String(64), ForeignKey("products.id"), index=True, nullable=False)
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    movement_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)  # 'RESTOCK_IN', 'PRODUCTION_IN', 'PRODUCTION_OUT', 'POS_SALE_OUT', 'STOCK_OPNAME_ADJUSTMENT'
+    quantity_delta: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)  # Positif (+) jika masuk, Negatif (-) jika keluar
+    unit: Mapped[str] = mapped_column(String(32), default="Pcs")
+    cost_per_unit: Mapped[float] = mapped_column(Numeric(18, 2), default=0.0)
+    total_cost: Mapped[float] = mapped_column(Numeric(18, 2), default=0.0)
+    stock_before: Mapped[float] = mapped_column(Numeric(18, 4), default=0.0)
+    stock_after: Mapped[float] = mapped_column(Numeric(18, 4), default=0.0)
+    reference_number: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    product = relationship("Product")
+

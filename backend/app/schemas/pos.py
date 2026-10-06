@@ -130,3 +130,28 @@ class ProductionBatchPayload(BaseModel):
 
 class ApplyPricePayload(BaseModel):
     new_price: float = Field(gt=0, description="Harga jual baru yang diterapkan ke katalog kasir POS")
+
+
+class StockMovementSchema(BaseModel):
+    id: str
+    tenant_id: str
+    product_id: str
+    product_name: str
+    movement_type: str
+    quantity_delta: float
+    unit: str
+    cost_per_unit: float
+    total_cost: float
+    stock_before: float
+    stock_after: float
+    reference_number: str
+    notes: Optional[str] = None
+    created_at: str
+
+
+class StockAdjustmentPayload(BaseModel):
+    product_id: str = Field(description="ID barang / bahan yang disesuaikan")
+    actual_physical_stock: float = Field(ge=0, description="Jumlah stok fisik riil hasil stock opname")
+    reason: str = Field(min_length=3, max_length=255, description="Alasan penyesuaian (misal: Selisih Opname, Rusak/Basi, Kadaluarsa, Bonus)")
+    notes: Optional[str] = None
+

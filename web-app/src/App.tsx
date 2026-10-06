@@ -12,6 +12,7 @@ import { lazyWithRetry } from './utils/lazyWithRetry';
 // Lazy Loaded Workspace Modules (Resilient Code Splitting with Auto Stale-Chunk Recovery)
 const CockpitView = lazyWithRetry(() => import('./components/views/CockpitView').then(m => ({ default: m.CockpitView })), 'CockpitView');
 const POSView = lazyWithRetry(() => import('./components/views/POSView').then(m => ({ default: m.POSView })), 'POSView');
+const InventoryView = lazyWithRetry(() => import('./components/views/InventoryView').then(m => ({ default: m.InventoryView })), 'InventoryView');
 const LedgerView = lazyWithRetry(() => import('./components/views/LedgerView').then(m => ({ default: m.LedgerView })), 'LedgerView');
 const MonteCarloView = lazyWithRetry(() => import('./components/views/MonteCarloView').then(m => ({ default: m.MonteCarloView })), 'MonteCarloView');
 const LoanDeobfuscatorView = lazyWithRetry(() => import('./components/views/LoanDeobfuscatorView').then(m => ({ default: m.LoanDeobfuscatorView })), 'LoanDeobfuscatorView');
@@ -349,6 +350,8 @@ export const App: React.FC = () => {
                 return <CockpitView kpi={kpi} onNavigate={setActiveTab} tenant={currentTenant} />;
               case 'pos':
                 return <POSView tenant={currentTenant} onNavigateToLedger={() => setActiveTab('ledger')} onMarginAlertsChange={setMarginAlerts} />;
+              case 'inventory':
+                return <InventoryView tenant={currentTenant} onNavigateToPOS={() => setActiveTab('pos')} onNavigateToLedger={() => setActiveTab('ledger')} />;
               case 'ledger':
                 return <LedgerView isPiiMasked={isPiiMasked} userRole={userRole} tenant={currentTenant} />;
               case 'montecarlo':

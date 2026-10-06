@@ -18,7 +18,8 @@ from sqlalchemy import select, or_, func
 from app.domain.models import (
     Product,
     ProductRecipeItem,
-    ProductionBatchRecord
+    ProductionBatchRecord,
+    StockMovementRecord
 )
 from app.domain.services.ai_service import ai_service
 from app.domain.services.accounting_service import (
@@ -31,7 +32,8 @@ from app.domain.services.accounting_service import (
 )
 from app.schemas.pos import (
     RestockInventoryPayload,
-    ProductionBatchPayload
+    ProductionBatchPayload,
+    StockAdjustmentPayload
 )
 
 
@@ -63,6 +65,46 @@ class InventoryService:
         
         weighted_cost = ((old_stock * old_cogs) + (added_qty * purchase_price)) / total_qty
         return round(weighted_cost, 2)
+
+    @classmethod
+    async def record_stock_movement(
+        cls,
+        db: AsyncSession,
+        tenant_id: str,
+        product_id: str,
+        product_name: str,
+        movement_type: str,
+        quantity_delta: float,
+        unit: str,
+        cost_per_unit: float,
+        total_cost: float,
+        stock_before: float,
+        stock_after: float,
+        reference_number: str,
+        notes: Optional[str] = None
+    ) -> StockMovementRecord:
+        """
+        Merekam mutasi fisik barang ke buku besar pergerakan stok (Stock Movement Ledger).
+        Kepatuhan audit SAK EMKM dan inventarisasi berkala.
+        """
+        mov = StockMovementRecord(
+            id=f"mov-{uuid.uuid4().hex[:12]}",
+            tenant_id=tenant_id,
+            product_id=product_id,
+            product_name=product_name,
+            movement_type=movement_type,
+            quantity_delta=quantity_delta,
+            unit=unit or "Pcs",
+            cost_per_unit=round(cost_per_unit, 2),
+            total_cost=round(total_cost, 2),
+            stock_before=round(stock_before, 4),
+            stock_after=round(stock_after, 4),
+            reference_number=reference_number,
+            notes=notes,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(mov)
+        return mov
 
     @classmethod
     async def restock_inventory_and_evaluate_bom(
@@ -235,6 +277,24 @@ class InventoryService:
             except Exception as e:
                 print(f"[InventoryService] Warning posting jurnal restock: {e}")
 
+        # Catat mutasi fisik barang ke buku besar mutasi (RESTOCK_IN)
+        ref_buy = journal_entry_num or f"RESTOCK-{uuid.uuid4().hex[:6].upper()}"
+        await cls.record_stock_movement(
+            db=db,
+            tenant_id=tenant_id,
+            product_id=material.id,
+            product_name=material.name,
+            movement_type="RESTOCK_IN",
+            quantity_delta=added_qty,
+            unit=material.unit or "Kg",
+            cost_per_unit=purchase_price,
+            total_cost=total_purchase_amount,
+            stock_before=old_stock,
+            stock_after=total_qty,
+            reference_number=ref_buy,
+            notes=payload.notes or f"Restock dari {payload.supplier_name or 'Pemasok'}"
+        )
+
         await db.commit()
 
         return {
@@ -289,6 +349,7 @@ class InventoryService:
 
         qty_produced = payload.quantity_produced
         overhead_batch = float(payload.overhead_cost or 0.0)
+        batch_num = f"BATCH-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
         total_batch_material_cost = 0.0
         materials_consumed = []
@@ -313,7 +374,25 @@ class InventoryService:
                 mat_prod = m_res.scalar_one_or_none()
 
             if mat_prod:
-                mat_prod.stock = max(0, round(float(mat_prod.stock) - required_qty))
+                stock_prev = float(mat_prod.stock)
+                stock_now = max(0, round(stock_prev - required_qty))
+                mat_prod.stock = stock_now
+                # Catat mutasi bahan baku keluar untuk produksi
+                await cls.record_stock_movement(
+                    db=db,
+                    tenant_id=tenant_id,
+                    product_id=mat_prod.id,
+                    product_name=mat_prod.name,
+                    movement_type="PRODUCTION_OUT",
+                    quantity_delta=-required_qty,
+                    unit=r_item.unit or mat_prod.unit or "Pcs",
+                    cost_per_unit=unit_cost,
+                    total_cost=line_cost,
+                    stock_before=stock_prev,
+                    stock_after=stock_now,
+                    reference_number=batch_num,
+                    notes=f"Konsumsi bahan produksi batch {batch_num} ({qty_produced} {product.unit} {product.name})"
+                )
 
             materials_consumed.append({
                 "material_name": r_item.material_name,
@@ -331,6 +410,7 @@ class InventoryService:
             })
 
         # Tambah stok produk jadi
+        stock_before_prod = float(product.stock)
         product.stock = product.stock + qty_produced
 
         # Hitung HPP riil batch
@@ -344,6 +424,23 @@ class InventoryService:
         unit_cost_hpp = round(adjusted_material_cost + overhead_per_unit, 2)
 
         product.cogs = unit_cost_hpp
+
+        # Catat mutasi produk jadi masuk dari hasil produksi
+        await cls.record_stock_movement(
+            db=db,
+            tenant_id=tenant_id,
+            product_id=product.id,
+            product_name=product.name,
+            movement_type="PRODUCTION_IN",
+            quantity_delta=float(qty_produced),
+            unit=product.unit or "Pcs",
+            cost_per_unit=unit_cost_hpp,
+            total_cost=round(unit_cost_hpp * qty_produced, 2),
+            stock_before=stock_before_prod,
+            stock_after=float(product.stock),
+            reference_number=batch_num,
+            notes=f"Hasil produksi batch {batch_num} (+{qty_produced} {product.unit})"
+        )
 
         # Evaluasi AI Pricing
         pricing_eval = ai_service.calculate_dynamic_pricing_recommendation(
@@ -364,7 +461,6 @@ class InventoryService:
         margin_status = pricing_eval["margin_status"]
 
         # Simpan batch record
-        batch_num = f"BATCH-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         batch_record = ProductionBatchRecord(
             id=f"batch-{uuid.uuid4().hex[:12]}",
             tenant_id=tenant_id,
@@ -495,6 +591,225 @@ class InventoryService:
             "alerts": alerts
         }
 
+    @classmethod
+    async def get_stock_movements(
+        cls,
+        db: AsyncSession,
+        tenant_id: str,
+        product_id: Optional[str] = None,
+        movement_type: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Mengambil riwayat mutasi keluar-masuk barang fisik (Stock Movement Ledger).
+        """
+        stmt = select(StockMovementRecord).where(
+            StockMovementRecord.tenant_id == tenant_id
+        )
+        if product_id:
+            stmt = stmt.where(StockMovementRecord.product_id == product_id)
+        if movement_type:
+            stmt = stmt.where(StockMovementRecord.movement_type == movement_type)
+
+        stmt = stmt.order_by(StockMovementRecord.created_at.desc()).limit(limit)
+        res = await db.execute(stmt)
+        records = res.scalars().all()
+
+        return [
+            {
+                "id": r.id,
+                "tenant_id": r.tenant_id,
+                "product_id": r.product_id,
+                "product_name": r.product_name,
+                "movement_type": r.movement_type,
+                "quantity_delta": float(r.quantity_delta),
+                "unit": r.unit,
+                "cost_per_unit": float(r.cost_per_unit),
+                "total_cost": float(r.total_cost),
+                "stock_before": float(r.stock_before),
+                "stock_after": float(r.stock_after),
+                "reference_number": r.reference_number,
+                "notes": r.notes,
+                "created_at": r.created_at.strftime("%d-%m-%Y %H:%M:%S WIB") if r.created_at else ""
+            }
+            for r in records
+        ]
+
+    @classmethod
+    async def adjust_stock(
+        cls,
+        db: AsyncSession,
+        tenant_id: str,
+        payload: StockAdjustmentPayload
+    ) -> Dict[str, Any]:
+        """
+        Siklus Stock Opname / Penyesuaian Stok Fisik Riil:
+        - Memperbarui stok fisik di katalog
+        - Merekam kartu mutasi STOCK_OPNAME_ADJUSTMENT
+        - Jika terjadi selisih minus (kehilangan/kerusakan/basi), otomatis posting jurnal rugi persediaan SAK EMKM
+        """
+        stmt = select(Product).where(
+            Product.id == payload.product_id,
+            Product.tenant_id == tenant_id
+        )
+        res = await db.execute(stmt)
+        product = res.scalar_one_or_none()
+        if not product:
+            raise ValueError(f"Barang dengan ID '{payload.product_id}' tidak ditemukan.")
+
+        stock_before = float(product.stock)
+        stock_after = float(payload.actual_physical_stock)
+        diff = stock_after - stock_before
+
+        if diff == 0:
+            return {
+                "success": True,
+                "message": f"Stok fisik {product.name} sudah sesuai catatan sistem ({stock_before} {product.unit}).",
+                "product_id": product.id,
+                "stock": product.stock,
+                "difference": 0
+            }
+
+        product.stock = round(stock_after)
+        cogs = float(product.cogs or 0.0)
+        total_adjustment_value = round(abs(diff) * cogs, 2)
+        ref_num = f"OPN-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+
+        # Catat mutasi stok
+        await cls.record_stock_movement(
+            db=db,
+            tenant_id=tenant_id,
+            product_id=product.id,
+            product_name=product.name,
+            movement_type="STOCK_OPNAME_ADJUSTMENT",
+            quantity_delta=diff,
+            unit=product.unit or "Pcs",
+            cost_per_unit=cogs,
+            total_cost=total_adjustment_value,
+            stock_before=stock_before,
+            stock_after=stock_after,
+            reference_number=ref_num,
+            notes=f"Stock Opname: {payload.reason}. {payload.notes or ''}"
+        )
+
+        # Jika ada selisih negatif (stok fisik hilang/rusak/basi), posting jurnal rugi persediaan SAK EMKM
+        journal_entry_num = None
+        if diff < 0 and total_adjustment_value > 0:
+            is_equipment = any(k in product.category.lower() for k in ["alat", "peralatan", "mesin", "aset", "equipment"])
+            inv_credit_code = COA_FIXED_EQUIPMENT if is_equipment else COA_INVENTORY_RAW
+            try:
+                journal = await AccountingService.post_double_entry(
+                    db=db,
+                    tenant_id=tenant_id,
+                    description=f"Penyusutan/Kerugian Persediaan {product.name} (Opname)",
+                    debit_account_code=COA_COGS,
+                    credit_account_code=inv_credit_code,
+                    amount=total_adjustment_value,
+                    memo_debit=f"Selisih stok hilang/rusak {abs(diff)} {product.unit} (Opname)",
+                    memo_credit=f"Penyesuaian kartu stok fisik {ref_num}",
+                    source="MANUAL"
+                )
+                journal_entry_num = journal.entry_number
+            except Exception as e:
+                print(f"[InventoryService] Warning posting jurnal opname: {e}")
+
+        await db.commit()
+        await db.refresh(product)
+
+        return {
+            "success": True,
+            "message": f"Stok {product.name} berhasil disesuaikan dari {stock_before} menjadi {stock_after} {product.unit}.",
+            "product_id": product.id,
+            "product_name": product.name,
+            "stock_before": stock_before,
+            "stock_after": stock_after,
+            "difference": diff,
+            "reference_number": ref_num,
+            "journal_entry_number": journal_entry_num
+        }
+
+    @classmethod
+    async def get_inventory_summary(
+        cls,
+        db: AsyncSession,
+        tenant_id: str
+    ) -> Dict[str, Any]:
+        """
+        Menghasilkan rekapitulasi menyeluruh stok persediaan:
+        - Bahan Baku & Kemasan (1104)
+        - Produk Jadi Siap Jual (1105)
+        - Peralatan & Aset Toko (1201)
+        - Peringatan stok menipis (Low Stock Alert)
+        """
+        stmt = select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name.asc())
+        res = await db.execute(stmt)
+        all_products = res.scalars().all()
+
+        raw_materials = []
+        finished_goods = []
+        equipment_assets = []
+
+        total_raw_value = 0.0
+        total_finished_value = 0.0
+        total_equipment_value = 0.0
+        low_stock_count = 0
+
+        for p in all_products:
+            cat = (p.category or "").lower()
+            name = (p.name or "").lower()
+            stock = float(p.stock or 0)
+            cogs = float(p.cogs or 0)
+            price = float(p.price or 0)
+            item_value = stock * (cogs if cogs > 0 else price)
+
+            is_eq = any(k in cat or k in name for k in ["alat", "peralatan", "mesin", "aset", "equipment", "blender", "timbangan", "grinder", "wajan", "kompor"])
+            is_mat = any(k in cat or k in name for k in ["bahan", "raw", "material", "kemasan", "packaging", "biji", "bubuk", "tepung", "gula", "cup", "botol kosong"])
+
+            is_low = stock <= 5 and not is_eq
+            if is_low:
+                low_stock_count += 1
+
+            item_dict = {
+                "id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "category": p.category,
+                "stock": p.stock,
+                "unit": p.unit or "Pcs",
+                "cogs": cogs,
+                "price": price,
+                "total_inventory_value": round(item_value, 2),
+                "is_low_stock": is_low
+            }
+
+            if is_eq:
+                equipment_assets.append(item_dict)
+                total_equipment_value += item_value
+            elif is_mat:
+                raw_materials.append(item_dict)
+                total_raw_value += item_value
+            else:
+                finished_goods.append(item_dict)
+                total_finished_value += item_value
+
+        return {
+            "summary": {
+                "total_raw_material_value": round(total_raw_value, 2),
+                "total_finished_goods_value": round(total_finished_value, 2),
+                "total_equipment_value": round(total_equipment_value, 2),
+                "total_warehouse_value": round(total_raw_value + total_finished_value + total_equipment_value, 2),
+                "total_items_count": len(all_products),
+                "raw_materials_count": len(raw_materials),
+                "finished_goods_count": len(finished_goods),
+                "equipment_assets_count": len(equipment_assets),
+                "low_stock_alerts_count": low_stock_count
+            },
+            "raw_materials": raw_materials,
+            "finished_goods": finished_goods,
+            "equipment_assets": equipment_assets
+        }
+
 
 # Singleton instance
 inventory_service = InventoryService()
+

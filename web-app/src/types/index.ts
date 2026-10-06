@@ -1,6 +1,7 @@
 export type NavigationTab = 
   | 'cockpit'
   | 'pos'
+  | 'inventory'
   | 'ledger'
   | 'montecarlo'
   | 'loan_deobfuscator'
@@ -439,5 +440,53 @@ export interface RunwayBaseline {
   data_source: string;
   transaction_count: number;
 }
+
+export interface StockMovement {
+  id: string;
+  tenant_id: string;
+  product_id: string;
+  product_name: string;
+  movement_type: string;
+  quantity_delta: number;
+  unit: string;
+  cost_per_unit: number;
+  total_cost: number;
+  stock_before: number;
+  stock_after: number;
+  reference_number: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  stock: number;
+  unit: string;
+  cogs: number;
+  price: number;
+  total_inventory_value: number;
+  is_low_stock: boolean;
+}
+
+export interface InventorySummary {
+  summary: {
+    total_raw_material_value: number;
+    total_finished_goods_value: number;
+    total_equipment_value: number;
+    total_warehouse_value: number;
+    total_items_count: number;
+    raw_materials_count: number;
+    finished_goods_count: number;
+    equipment_assets_count: number;
+    low_stock_alerts_count: number;
+  };
+  raw_materials: InventoryItem[];
+  finished_goods: InventoryItem[];
+  equipment_assets: InventoryItem[];
+}
+
 
 
