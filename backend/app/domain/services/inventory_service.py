@@ -707,7 +707,8 @@ class InventoryService:
                     amount=total_adjustment_value,
                     memo_debit=f"Selisih stok hilang/rusak {abs(diff)} {product.unit} (Opname)",
                     memo_credit=f"Penyesuaian kartu stok fisik {ref_num}",
-                    source="MANUAL"
+                    entry_number_prefix="JV-OPN",
+                    update_account_balances=True
                 )
                 journal_entry_num = journal.entry_number
             except Exception as e:
