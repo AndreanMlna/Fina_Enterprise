@@ -90,7 +90,10 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
             gap: '12px'
           }}>
             {/* Stat 1: Kas Likuid */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'default' }}
+              title={`Saldo Kas Likuid Aktual: Rp ${Math.round(kpi.liquidCash || 0).toLocaleString('id-ID')}`}
+            >
               <div style={{
                 width: '32px',
                 height: '32px',
@@ -115,7 +118,10 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
             </div>
 
             {/* Stat 2: Omzet Usaha */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'default' }}
+              title={`Total Omzet Penjualan Riil: Rp ${Math.round(kpi.totalRevenue || 0).toLocaleString('id-ID')}`}
+            >
               <div style={{
                 width: '32px',
                 height: '32px',
@@ -132,7 +138,11 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
               <div>
                 <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
                   {kpi.totalRevenue && kpi.totalRevenue > 0 
-                    ? (kpi.totalRevenue >= 1000000 ? `${(kpi.totalRevenue / 1000000).toFixed(1)}M` : `${(kpi.totalRevenue / 1000).toFixed(0)}K`)
+                    ? (kpi.totalRevenue >= 1000000 
+                        ? `${(kpi.totalRevenue / 1000000).toFixed(1)}M` 
+                        : (kpi.totalRevenue >= 1000 
+                            ? `${(kpi.totalRevenue / 1000).toFixed(0)}K` 
+                            : `Rp ${Math.round(kpi.totalRevenue).toLocaleString('id-ID')}`))
                     : 'Rp 0'}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
@@ -142,7 +152,10 @@ export const CockpitHeroBanner: React.FC<CockpitHeroBannerProps> = ({
             </div>
 
             {/* Stat 3: Piutang Usaha */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'default' }}
+              title={`Total Piutang Usaha Aktif: Rp ${Math.round(kpi.activeAccountsReceivable || 0).toLocaleString('id-ID')}`}
+            >
               <div style={{
                 width: '32px',
                 height: '32px',

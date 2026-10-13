@@ -34,7 +34,8 @@ interface CockpitViewProps {
 }
 
 export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenant }) => {
-  // State manajemen dashboard
+  // State manajemen dashboard & data finansial live dari DB
+  const [liveKpi, setLiveKpi] = useState<KPIStats>(kpi);
   const [activeTelemetryFilter, setActiveTelemetryFilter] = useState<'ALL' | 'SWEEPING' | 'DUNNING' | 'AUDIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [tableMode, setTableMode] = useState<'TRANSACTIONS' | 'STAFF'>('TRANSACTIONS');
@@ -43,13 +44,18 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
   const [dbAutomations, setDbAutomations] = useState<AutomationScheduleItem[]>([]);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
+  useEffect(() => {
+    setLiveKpi(kpi);
+  }, [kpi]);
+
   // Sinkronisasi data live dari PostgreSQL 16
   const loadDashboardData = useCallback(async () => {
     try {
-      const [staffData, vouchersData, automationsData] = await Promise.allSettled([
+      const [staffData, vouchersData, automationsData, kpiData] = await Promise.allSettled([
         api.getStaffList(),
         api.getLedgerEntries(),
-        api.getAutomations()
+        api.getAutomations(),
+        api.getKPIDashboard()
       ]);
       if (staffData.status === 'fulfilled' && Array.isArray(staffData.value)) {
         setStaffList(staffData.value);
@@ -59,6 +65,19 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
       }
       if (automationsData.status === 'fulfilled' && Array.isArray(automationsData.value) && automationsData.value.length > 0) {
         setDbAutomations(automationsData.value);
+      }
+      if (kpiData.status === 'fulfilled' && kpiData.value) {
+        const kd = kpiData.value;
+        setLiveKpi({
+          liquidCash: kd.liquid_cash,
+          safetyBuffer: kd.safety_buffer,
+          cashRunwayDays: kd.cash_runway_days,
+          financialHealthIndex: kd.financial_health_index,
+          marginLeakageMonthly: kd.margin_leakage_monthly,
+          activeAccountsReceivable: kd.active_accounts_receivable,
+          estimatedTaxPP55: kd.estimated_tax_pp55,
+          totalRevenue: kd.total_revenue,
+        });
       }
     } catch (err) {
       console.warn("[CockpitView] Gagal mengambil data live dashboard:", err);
@@ -206,7 +225,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
       <CockpitHeroBanner
         tenant={tenant}
         formattedToday={formattedToday}
-        kpi={kpi}
+        kpi={liveKpi}
         staffList={staffList}
         onNavigate={onNavigate}
       />
@@ -229,7 +248,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({ kpi, onNavigate, tenan
 
         {/* CARD 2: Kinerja Likuiditas & Efisiensi Arus Kas */}
         <CockpitLiquidityCard
-          kpi={kpi}
+          kpi={liveKpi}
           onNavigate={onNavigate}
         />
 

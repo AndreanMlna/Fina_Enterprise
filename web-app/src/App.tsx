@@ -281,6 +281,7 @@ export const App: React.FC = () => {
                   marginLeakageMonthly: kpiData.margin_leakage_monthly,
                   activeAccountsReceivable: kpiData.active_accounts_receivable,
                   estimatedTaxPP55: kpiData.estimated_tax_pp55,
+                  totalRevenue: kpiData.total_revenue,
                 });
               }
             }).catch(() => {});
@@ -387,6 +388,7 @@ export const App: React.FC = () => {
                             marginLeakageMonthly: kpiData.margin_leakage_monthly,
                             activeAccountsReceivable: kpiData.active_accounts_receivable,
                             estimatedTaxPP55: kpiData.estimated_tax_pp55,
+                            totalRevenue: kpiData.total_revenue,
                           });
                         }
                       }).catch(() => {});
