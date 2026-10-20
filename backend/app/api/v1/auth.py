@@ -13,6 +13,9 @@ import jwt
 from app.core.security import verify_pin, create_access_token, decode_access_token, hash_pin
 from app.domain.models import UserCredential, Tenant
 from app.infrastructure.database import get_db
+from app.core.config import settings
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 router = APIRouter(prefix="/auth", tags=["Enterprise Authentication"])
 security_scheme = HTTPBearer(auto_error=False)
@@ -98,12 +101,23 @@ class TenantSummarySchema(BaseModel):
 
 class UserProfileSchema(BaseModel):
     id: str
-    phone_number: str
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    google_id: Optional[str] = None
+    auth_provider: Optional[str] = "LOCAL"
+    avatar_url: Optional[str] = None
     full_name: str
     role: str
     tenant_id: str
     is_active: bool
     last_login_at: Optional[datetime] = None
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(
+        ...,
+        description="Google Identity Services (GIS) ID Token (JWT) yang diperoleh dari client-side callback"
+    )
 
 
 class CreateStaffRequest(BaseModel):
@@ -164,7 +178,8 @@ def _build_login_response(user: UserCredential, tenant: Optional[Tenant]) -> Log
     tenant_name = tenant.name if tenant else ""
     token_payload = {
         "sub": user.id,
-        "phone_number": user.phone_number,
+        "phone_number": user.phone_number or "",
+        "email": user.email or "",
         "role": user.role,
         "tenant_id": user.tenant_id,
         "tenant_name": tenant_name
@@ -174,6 +189,10 @@ def _build_login_response(user: UserCredential, tenant: Optional[Tenant]) -> Log
     user_profile = UserProfileSchema(
         id=user.id,
         phone_number=user.phone_number,
+        email=user.email,
+        google_id=user.google_id,
+        auth_provider=user.auth_provider or "LOCAL",
+        avatar_url=user.avatar_url,
         full_name=user.full_name,
         role=user.role,
         tenant_id=user.tenant_id,
@@ -429,6 +448,128 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
     # Buat Entitas Bisnis & Kredensial Owner
     new_tenant, new_user = await _create_tenant_and_owner(db, payload, raw_phone)
+    return _build_login_response(new_user, new_tenant)
+
+
+@router.post("/google", response_model=LoginResponse, summary="Autentikasi Akun Google via GIS (Google Identity Services)")
+async def login_with_google(payload: GoogleAuthRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Endpoint autentikasi Single Sign-On (SSO) Google Enterprise:
+    1. Memverifikasi cryptographic integrity & claims dari Google ID Token (OIDC).
+    2. Mencari akun pengguna terdaftar berdasarkan google_id atau email terverifikasi.
+    3. Jika pengguna baru, secara atomik membuat entitas Tenant dan akun UserCredential baru (role: OWNER).
+    4. Jika pengguna eksisting mendaftar via nomor HP namun memiliki email yang sama, menautkan google_id (Hybrid Auth).
+    5. Menerbitkan RFC 7519 Signed JWT Access Token resmi FINA Enterprise.
+    """
+    raw_token = payload.id_token.strip()
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token kredensial Google ID Token tidak boleh kosong."
+        )
+
+    # 1. Verifikasi Google ID Token dengan Public Keys resmi Google
+    try:
+        client_id = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
+        id_info = google_id_token.verify_oauth2_token(
+            raw_token,
+            google_requests.Request(),
+            client_id
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Verifikasi kredensial Google gagal: {str(exc)}"
+        )
+
+    google_sub = id_info.get("sub")
+    email = id_info.get("email")
+    full_name = id_info.get("name") or id_info.get("given_name") or "Pengusaha UMKM"
+    picture = id_info.get("picture")
+
+    if not google_sub:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kredensial Google tidak memiliki pengenal subjek (sub) yang valid."
+        )
+
+    # 2. Cek apakah pengguna sudah pernah login / terdaftar sebelumnya
+    match_conditions = [UserCredential.google_id == google_sub]
+    if email:
+        match_conditions.append(UserCredential.email == email)
+
+    stmt = (
+        select(UserCredential)
+        .options(selectinload(UserCredential.tenant))
+        .where(or_(*match_conditions))
+    )
+    user = await db.scalar(stmt)
+
+    if user:
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun Anda saat ini dinonaktifkan. Silakan hubungi Administrator FINA Enterprise."
+            )
+
+        # Update metadata jika belum terisi
+        modified = False
+        if not user.google_id:
+            user.google_id = google_sub
+            user.auth_provider = "HYBRID"
+            modified = True
+        if email and not user.email:
+            user.email = email
+            modified = True
+        if picture and not user.avatar_url:
+            user.avatar_url = picture
+            modified = True
+
+        user.failed_attempts = 0
+        user.last_login_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(user)
+        return _build_login_response(user, user.tenant)
+
+    # 3. Pengguna Baru: Provisioning Tenant & Akun Baru secara Otomatis
+    tenant_id = f"t-{uuid.uuid4().hex[:8]}"
+    first_name = full_name.split()[0] if full_name else "UMKM"
+    biz_name = f"Usaha {first_name}"
+    clean_biz_code = re.sub(r"[^A-Za-z0-9]", "", biz_name).upper()[:8] or "UMKM"
+    branch_code = f"ID-{clean_biz_code}-{uuid.uuid4().hex[:4].upper()}"
+
+    new_tenant = Tenant(
+        id=tenant_id,
+        name=biz_name,
+        branch_code=branch_code,
+        npwp="00.000.000.0-000.000",
+        address="Indonesia",
+        active_license="UMKM_GROWTH"
+    )
+    db.add(new_tenant)
+    await db.flush()
+
+    user_id = f"usr-{uuid.uuid4().hex[:8]}"
+    new_user = UserCredential(
+        id=user_id,
+        tenant_id=tenant_id,
+        phone_number=None,
+        pin_hash=None,
+        email=email,
+        google_id=google_sub,
+        auth_provider="GOOGLE",
+        avatar_url=picture,
+        role="OWNER",
+        full_name=full_name.strip(),
+        is_active=True,
+        failed_attempts=0,
+        last_login_at=datetime.now(timezone.utc)
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    await db.refresh(new_tenant)
+
     return _build_login_response(new_user, new_tenant)
 
 

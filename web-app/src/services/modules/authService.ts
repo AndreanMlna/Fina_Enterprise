@@ -32,6 +32,18 @@ export class AuthService {
   }
 
   /**
+   * Autentikasi Pengguna UMKM via Google Identity Services (GIS) Single Sign-On
+   */
+  async loginWithGoogle(idToken: string): Promise<LoginResponse> {
+    const data = await httpClient.post<LoginResponse>('/api/v1/auth/google', {
+      id_token: idToken,
+    });
+    httpClient.setAuthToken(data.access_token);
+    sessionStorage.setItem('fina_auth_user', JSON.stringify(data.user));
+    return data;
+  }
+
+  /**
    * Verifikasi sesi login aktif & ambil profil terotentikasi
    */
   async getMe(): Promise<LoginResponse | null> {

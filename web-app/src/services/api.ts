@@ -39,6 +39,7 @@ class ApiService {
   // --- Domain: Autentikasi & Telemetri ---
   login = authService.login.bind(authService);
   register = authService.register.bind(authService);
+  loginWithGoogle = authService.loginWithGoogle.bind(authService);
   getMe = authService.getMe.bind(authService);
   checkHealth = authService.checkHealth.bind(authService);
   getSystemStatus = authService.getSystemStatus.bind(authService);

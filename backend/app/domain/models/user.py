@@ -9,8 +9,12 @@ class UserCredential(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     tenant_id: Mapped[str] = mapped_column(String(64), ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
-    phone_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
-    pin_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    pin_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    google_id: Mapped[Optional[str]] = mapped_column(String(128), unique=True, index=True, nullable=True)
+    auth_provider: Mapped[str] = mapped_column(String(32), default="LOCAL")  # 'LOCAL', 'GOOGLE', 'HYBRID'
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     role: Mapped[str] = mapped_column(String(32), default="OWNER")  # 'OWNER', 'MANAGER', 'CASHIER', 'AUDITOR', 'STAFF_CS'
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

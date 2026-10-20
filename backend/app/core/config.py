@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = Field(default="", description="Kunci API Google AI Studio Gemini")
     GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite", description="Model Gemini resmi (default: gemini-3.5-flash-lite, fallback: gemini-3.8-flash, gemini-3.6-flash)")
 
+    # Google Identity Services (GIS) / OAuth 2.0 Credentials
+    GOOGLE_CLIENT_ID: str = Field(default="", description="Google OAuth 2.0 Web Client ID")
+    GOOGLE_CLIENT_SECRET: str = Field(default="", description="Google OAuth 2.0 Web Client Secret")
+
     model_config = SettingsConfigDict(
         env_file=("backend/.env", ".env", "../.env"),
         env_file_encoding="utf-8",

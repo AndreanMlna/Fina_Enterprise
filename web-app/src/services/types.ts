@@ -58,7 +58,11 @@ export interface LoginResponse {
   token_type: string;
   user: {
     id: string;
-    phone_number: string;
+    phone_number?: string;
+    email?: string;
+    google_id?: string;
+    auth_provider?: string;
+    avatar_url?: string;
     full_name: string;
     role: string;
     tenant_id: string;
@@ -73,6 +77,10 @@ export interface LoginResponse {
     address?: string;
     npwp?: string;
   };
+}
+
+export interface GoogleAuthPayload {
+  id_token: string;
 }
 
 export interface RegisterPayload {

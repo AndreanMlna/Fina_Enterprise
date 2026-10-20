@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
   ArrowLeft, 
@@ -52,6 +52,88 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [regConfirmPin, setRegConfirmPin] = useState('');
   const [showRegPin, setShowRegPin] = useState(false);
   const [showRegConfirmPin, setShowRegConfirmPin] = useState(false);
+
+  // Google Single Sign-On States
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGsiLoaded, setIsGsiLoaded] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+
+  // Inisialisasi Google Identity Services (GIS) SDK
+  useEffect(() => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '798884586576-sa23jo678og91efhsrlotpddf1p1k7m8.apps.googleusercontent.com';
+
+    const handleGoogleCredentialResponse = async (response: any) => {
+      if (!response?.credential) {
+        setErrorMessage('Gagal menerima kredensial akun Google dari browser.');
+        return;
+      }
+      setIsGoogleLoading(true);
+      setErrorMessage(null);
+      setSuccessMessage('Memverifikasi autentikasi token kriptografis Google ID...');
+
+      try {
+        const res = await api.loginWithGoogle(response.credential);
+        setSuccessMessage(`Selamat datang, ${res.user.full_name}! Mengalihkan ke workspace bisnis...`);
+        setTimeout(() => {
+          setIsGoogleLoading(false);
+          onLoginSuccess((res.user.role as UserRole) || 'OWNER', 'portal_umkm', res.tenant);
+        }, 500);
+      } catch (err: any) {
+        setIsGoogleLoading(false);
+        setErrorMessage(err?.message || 'Autentikasi Google gagal diverifikasi oleh server FINA.');
+      }
+    };
+
+    const setupGsi = () => {
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          if (googleButtonRef.current) {
+            googleButtonRef.current.innerHTML = '';
+            (window as any).google.accounts.id.renderButton(googleButtonRef.current, {
+              theme: 'outline',
+              size: 'large',
+              shape: 'pill',
+              width: 320,
+              text: activeTab === 'register' ? 'signup_with' : 'signin_with',
+              logo_alignment: 'left',
+            });
+            setIsGsiLoaded(true);
+          }
+        } catch (err) {
+          console.warn('GSI Setup Warning:', err);
+        }
+      }
+    };
+
+    setupGsi();
+    const interval = setInterval(() => {
+      if ((window as any).google?.accounts?.id) {
+        setupGsi();
+        clearInterval(interval);
+      }
+    }, 350);
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  const handleCustomGoogleClick = () => {
+    if ((window as any).google?.accounts?.id) {
+      (window as any).google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setErrorMessage('Jendela pop-up Google One Tap tidak dapat ditampilkan. Pastikan pop-up diizinkan di browser Anda dan domain localhost terdaftar di Google Cloud Console.');
+        }
+      });
+    } else {
+      setErrorMessage('SDK Google Identity Services sedang dimuat atau diblokir oleh ekstensi browser (adblocker/shield).');
+    }
+  };
 
   // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -330,6 +412,82 @@ export const LoginView: React.FC<LoginViewProps> = ({
             <div>{successMessage}</div>
           </div>
         )}
+
+        {/* Google Single Sign-On (GIS Identity Services) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '2px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%', minHeight: '44px' }}>
+            <div 
+              ref={googleButtonRef} 
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                width: '100%' 
+              }} 
+            />
+          </div>
+
+          {/* Fallback button if GIS native iframe is loading or user clicks manually */}
+          {(!isGsiLoaded || isGoogleLoading) && (
+            <button
+              type="button"
+              disabled={isGoogleLoading}
+              onClick={handleCustomGoogleClick}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                padding: '11px 16px',
+                borderRadius: '9999px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#ffffff',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                cursor: isGoogleLoading ? 'wait' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+              <span>{isGoogleLoading ? 'Memverifikasi Google Token...' : (activeTab === 'register' ? 'Daftar dengan Akun Google' : 'Lanjutkan dengan Google')}</span>
+            </button>
+          )}
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '4px 0' }}>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.12)' }} />
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+              {activeTab === 'login' ? 'atau nomor WhatsApp' : 'atau formulir manual'}
+            </span>
+            <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.12)' }} />
+          </div>
+        </div>
 
         {/* ========================================================================= */}
         {/* TAB 1: FORM LOGIN */}
