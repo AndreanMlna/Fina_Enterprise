@@ -1,4 +1,4 @@
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     # Google Identity Services (GIS) / OAuth 2.0 Credentials
     GOOGLE_CLIENT_ID: str = Field(default="", description="Google OAuth 2.0 Web Client ID")
     GOOGLE_CLIENT_SECRET: str = Field(default="", description="Google OAuth 2.0 Web Client Secret")
+
+    @field_validator("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", mode="before")
+    @classmethod
+    def sanitize_google_credentials(cls, v: str | None) -> str:
+        if isinstance(v, str):
+            return v.strip().replace("\t", "").replace("\r", "").replace("\n", "")
+        return v or ""
 
     model_config = SettingsConfigDict(
         env_file=("backend/.env", ".env", "../.env"),

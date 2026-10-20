@@ -470,7 +470,7 @@ async def login_with_google(payload: GoogleAuthRequest, db: AsyncSession = Depen
 
     # 1. Verifikasi Google ID Token dengan Public Keys resmi Google
     try:
-        client_id = settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
+        client_id = settings.GOOGLE_CLIENT_ID.strip().replace("\t", "") if settings.GOOGLE_CLIENT_ID else None
         id_info = google_id_token.verify_oauth2_token(
             raw_token,
             google_requests.Request(),

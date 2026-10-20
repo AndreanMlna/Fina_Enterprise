@@ -60,7 +60,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   // Inisialisasi Google Identity Services (GIS) SDK
   useEffect(() => {
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '798884586576-sa23jo678og91efhsrlotpddf1p1k7m8.apps.googleusercontent.com';
+    const rawGoogleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '798884586576-sa23jo678og91efhsrlotpddf1p1k7m8.apps.googleusercontent.com';
+    const googleClientId = rawGoogleClientId.trim().replace(/\t/g, '');
 
     const handleGoogleCredentialResponse = async (response: any) => {
       if (!response?.credential) {
